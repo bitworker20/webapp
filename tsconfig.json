@@ -1,0 +1,28 @@
+{
+  // NOTE ON THE TYPESCRIPT VERSION (package.json pins ~5.6.3 deliberately):
+  // src/poker is compiled by two toolchains — this build and the Keplr
+  // extension's TypeScript 5.0 (see keplr-wallet/apps/extension/tsconfig.json,
+  // which includes these same files through the @bitpoker/poker-core alias).
+  // TypeScript 5.7 made Uint8Array generic (Uint8Array<ArrayBufferLike>),
+  // which the shared crypto code does not satisfy under 5.0's rules. Staying
+  // on 5.6 keeps one source dialect for both builds; bump only when the
+  // extension's TypeScript moves too.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["vitest/globals", "node", "vite/client"]
+  },
+  "include": ["src"]
+}
