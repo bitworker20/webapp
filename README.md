@@ -37,6 +37,29 @@ The seam between the two is `src/poker/wallet-bridge.ts`. The extension passes
 a bridge that talks to its background service; this client passes
 `BrowserKeyBridge`, which signs in the page.
 
+## Where this directory lives
+
+It is developed inside the BitPoker monorepo and **mirrored one-way** to
+`github.com/bitworker20/webapp` (`make webapp-mirror` at the monorepo root) so
+a deployment host can build the page from a small clone instead of the whole
+repo and its six submodules. The mirror is a publishing target, not a fork:
+never commit to it directly — changes there will be overwritten by the next
+push.
+
+Everything needed to build and serve the page is here, including the
+`public/gamecore.{js,wasm}` artifacts, so `npm ci && npm run build` works in a
+bare clone. Two things do *not*:
+
+- **`npm run test:e2e`** borrows `puppeteer-core` from the keplr-wallet
+  workspace (`../keplr-wallet/node_modules`), so it only runs from the
+  monorepo. `npm test` runs anywhere.
+- **`docs/webapp-threat-model.md`**, linked above, lives in the monorepo.
+
+`public/gamecore.{js,wasm}` are checked-in build outputs of the monorepo's
+`bitpoker/wasm` target — see [`ASSETS.md`](ASSETS.md) for how to refresh them.
+They can only be regenerated there, so they go stale silently if someone
+changes the C++ gamecore without re-running that copy.
+
 ## Develop
 
 ```sh
