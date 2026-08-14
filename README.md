@@ -53,7 +53,8 @@ bare clone. Two things do *not*:
 - **`npm run test:e2e`** borrows `puppeteer-core` from the keplr-wallet
   workspace (`../keplr-wallet/node_modules`), so it only runs from the
   monorepo. `npm test` runs anywhere.
-- **`docs/webapp-threat-model.md`**, linked above, lives in the monorepo.
+- **`docs/webapp-threat-model.md`** and **`docs/webapp/deployment.md`**, linked
+  from here, live in the monorepo.
 
 `public/gamecore.{js,wasm}` are checked-in build outputs of the monorepo's
 `bitpoker/wasm` target — see [`ASSETS.md`](ASSETS.md) for how to refresh them.
@@ -110,3 +111,9 @@ the player can still override in the page.
 Serve from a **dedicated origin** with a strict CSP that includes
 `'wasm-unsafe-eval'`, over HTTPS (so relays must be `wss://`). The threat-model
 doc explains why each of those is a requirement rather than a preference.
+
+[`docs/webapp/deployment.md`](../docs/webapp/deployment.md) is the full recipe —
+nginx with a working CSP, MIME and caching, what the node and relay have to
+provide, and a verification checklist. Its config is tested rather than
+described: extracted from the file and run against a real nginx and a real
+Chrome.
