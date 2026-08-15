@@ -137,8 +137,10 @@ browser-only one.
 ## Configure a deployment
 
 Build-time `VITE_*` variables (see `src/config.ts`): `VITE_CHAIN_ID`,
-`VITE_BECH32_PREFIX`, `VITE_LCD_URL`, `VITE_RELAY_URL`. Endpoints are defaults
-the player can still override in the page.
+`VITE_BECH32_PREFIX`, `VITE_LCD_URL`, `VITE_RELAY_URL`. The endpoints are the
+publisher's choice, not the player's — Settings shows them read-only, because
+a node someone was talked into pasting can lie about balances, session state
+and relay assignments.
 
 Serve from a **dedicated origin** with a strict CSP that includes
 `'wasm-unsafe-eval'`, over HTTPS (so relays must be `wss://`). The threat-model
