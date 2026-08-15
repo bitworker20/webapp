@@ -1,9 +1,4 @@
-import {
-  adjustGas,
-  feeForGas,
-  parseGasPrices,
-  pickGasPrice,
-} from "./fees";
+import { adjustGas, feeForGas, parseGasPrices, pickGasPrice } from "./fees";
 
 describe("parseGasPrices", () => {
   it("reads what the node service actually returns", () => {
@@ -21,9 +16,7 @@ describe("parseGasPrices", () => {
   });
 
   it("reads a zero price as zero rather than as absent", () => {
-    expect(parseGasPrices("0uchip")).toEqual([
-      { amount: "0", denom: "uchip" },
-    ]);
+    expect(parseGasPrices("0uchip")).toEqual([{ amount: "0", denom: "uchip" }]);
   });
 
   it("ignores junk instead of inventing a price", () => {
@@ -70,9 +63,9 @@ describe("feeForGas", () => {
   });
 
   it("survives a gas limit past Number.MAX_SAFE_INTEGER", () => {
-    expect(feeForGas("100000000000000000000", { amount: "1", denom: "u" })).toEqual(
-      { denom: "u", amount: "100000000000000000000" }
-    );
+    expect(
+      feeForGas("100000000000000000000", { amount: "1", denom: "u" })
+    ).toEqual({ denom: "u", amount: "100000000000000000000" });
   });
 
   it("returns no coin at all for a zero price", () => {
