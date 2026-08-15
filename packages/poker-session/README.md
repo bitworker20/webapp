@@ -53,7 +53,7 @@ Everything here is compiled by **both** webpack (extension) and Rollup/Vite
 Rule 2 is what `scripts/stage.mjs` is for:
 
 ```sh
-node scripts/stage.mjs ../../webapp/public   # what webapp's `npm run stage` does
+node scripts/stage.mjs ../../public   # what webapp's `npm run stage` does
 ```
 
 It esbuilds `src/worker.ts` into `pokerWorker.bundle.js` and copies
