@@ -25,6 +25,7 @@ import {
 import {
   adjustGas,
   Coin,
+  DEFAULT_GAS_ADJUSTMENT,
   feeForGas,
   fetchNodeGasPrice,
   GasPrice,
@@ -61,13 +62,25 @@ const ALLOWED_PAYLOAD_PREFIXES = [
   "bitpoker-session-evidence-v1\n",
 ];
 
-// Fallbacks only. The gas limit normally comes from simulating the tx against
-// the node (see resolveGasLimit); these are what a tx pays when the node
-// refuses to simulate — the numbers this client used to hard-code, and the
-// ones the extension's background service still does. Evidence carries the
-// full message-history payload, so it pays a per-byte write cost.
-const GAS_LIMIT_DEFAULT = "400000";
-const GAS_LIMIT_EVIDENCE = "3000000";
+// Gas FLOORS for the game messages, not fixed limits: the tx pays whichever
+// is larger, the simulated estimate or this.
+//
+// Simulation measures the state the chain is in *now*, and these messages
+// change branch depending on state that moves underneath them. Submitting a
+// session result is the case that bit: simulated while the peer's result is
+// not yet recorded, it costs ~86k gas (the "record it" branch); by the time
+// it executes the peer's has landed, so it runs settlement — escrow payouts,
+// session finalisation — and costs ~111k. A tx that runs out of gas mid-hand
+// leaves the session RESULT_PENDING and the escrow locked, which is far worse
+// than overpaying a fraction of a CHIP, so the old hard-coded numbers stay as
+// the floor. Plain transfers, whose cost does not depend on anyone else, get
+// the estimate with no floor.
+const GAS_FLOOR_GAME = "400000";
+const GAS_FLOOR_EVIDENCE = "3000000";
+
+// A transfer's cost does not depend on state anyone else can move, so this is
+// only the fallback for a node that will not simulate — not a floor.
+const GAS_FALLBACK_SEND = "200000";
 
 // A simulated tx is never verified, but the signature slot must exist and be
 // the right length or the ante handler rejects the shape before measuring.
@@ -179,7 +192,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
         playerSessionPubkey: args.playerSessionPubkey,
         playerTransportPubkey: args.playerTransportPubkey,
       }),
-      GAS_LIMIT_DEFAULT
+      GAS_FLOOR_GAME
     );
   }
 
@@ -192,7 +205,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
       chainId,
       MSG_SUBMIT_SESSION_RESULT_TYPE_URL,
       encodeMsgSubmitSessionResult({ creator: bech32Address, ...args }),
-      GAS_LIMIT_DEFAULT
+      GAS_FLOOR_GAME
     );
   }
 
@@ -212,7 +225,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
         evidenceSignature: args.signature,
         reason: args.reason,
       }),
-      GAS_LIMIT_EVIDENCE
+      GAS_FLOOR_EVIDENCE
     );
   }
 
@@ -230,7 +243,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
         sessionSecretKey: hexToBytes(args.secretKeyHex),
         sessionPubkey: hexToBytes(args.pubkeyHex),
       }),
-      GAS_LIMIT_DEFAULT
+      GAS_FLOOR_GAME
     );
   }
 
@@ -253,7 +266,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
         toAddress: args.toAddress,
         amount: [args.amount],
       }),
-      GAS_LIMIT_DEFAULT,
+      GAS_FALLBACK_SEND,
       args.memo
     );
   }
@@ -277,7 +290,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
       }),
       args.memo
     );
-    return this.resolveCost(bodyBytes, sequence, GAS_LIMIT_DEFAULT);
+    return this.resolveCost(bodyBytes, sequence, GAS_FALLBACK_SEND);
   }
 
   // secp256k1 over a 32-byte digest, returned as r(32) || s(32). Cosmos
@@ -292,7 +305,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
     chainId: string,
     typeUrl: string,
     msgValue: Uint8Array,
-    fallbackGasLimit: string,
+    gasFloor: string,
     memo?: string
   ): Promise<PokerTxResult> {
     const identity = this.keyHolder.getIdentity();
@@ -303,7 +316,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
     const { gasLimit, fee } = await this.resolveCost(
       bodyBytes,
       sequence,
-      fallbackGasLimit
+      gasFloor
     );
 
     const authInfoBytes = encodeAuthInfo({
@@ -337,10 +350,10 @@ export class BrowserKeyBridge implements PokerWalletBridge {
   protected async resolveCost(
     bodyBytes: Uint8Array,
     sequence: string,
-    fallbackGasLimit: string
+    gasFloor: string
   ): Promise<{ gasLimit: string; fee?: Coin }> {
     const [gasLimit, price] = await Promise.all([
-      this.resolveGasLimit(bodyBytes, sequence, fallbackGasLimit),
+      this.resolveGasLimit(bodyBytes, sequence, gasFloor),
       this.resolveGasPrice(),
     ]);
     return { gasLimit, fee: price ? feeForGas(gasLimit, price) : undefined };
@@ -349,7 +362,7 @@ export class BrowserKeyBridge implements PokerWalletBridge {
   protected async resolveGasLimit(
     bodyBytes: Uint8Array,
     sequence: string,
-    fallbackGasLimit: string
+    gasFloor: string
   ): Promise<string> {
     const identity = this.keyHolder.getIdentity();
     // Gas limit 0 in the simulated tx: the simulation runs on an infinite
@@ -366,9 +379,11 @@ export class BrowserKeyBridge implements PokerWalletBridge {
           encodeTxRaw({ bodyBytes, authInfoBytes, signature: DUMMY_SIGNATURE })
         )
       );
-      return adjustGas(used);
+      return adjustGas(used, DEFAULT_GAS_ADJUSTMENT, Number(gasFloor));
     } catch {
-      return fallbackGasLimit;
+      // The node would not simulate; fall back to what this client used to
+      // send unconditionally.
+      return gasFloor;
     }
   }
 

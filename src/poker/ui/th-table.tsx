@@ -12,19 +12,11 @@ import {
   computeBetBounds,
 } from "@bitpoker/poker-session/bet-bounds";
 import { Cards, CardBacks } from "./cards";
-import { styles } from "./styles";
-import {
-  ResultBanner,
-  SessionStrip,
-  felt,
-  feltMuted,
-  seatPlate,
-  turnMark,
-} from "./table-chrome";
+import { QuickSizes, ResultBanner, Seat, SessionStrip } from "./table-chrome";
 
-// Texas Hold'em table on a felt surface: board + hole cards, seat plates,
-// bounds-validated bet sizing (slider + amount clamped to the engine rules),
-// the auto-hiding hand banner and the persistent session strip.
+// Texas Hold'em: board and hole cards on the felt, seat plates, and a
+// bounds-validated action bar (the slider and the amount are clamped to what
+// the engine will accept, so an illegal raise is not reachable from the UI).
 export const ThTable: React.FC<{
   t: TableState;
   me: number;
@@ -34,8 +26,7 @@ export const ThTable: React.FC<{
   continueWish: boolean;
   act: (kind: number, amount?: number) => void;
   setContinueWish: (wish: boolean) => void;
-  // Formats in-game chip amounts (chain sessions: uchip -> CHIP; dev play:
-  // plain numbers).
+  // Formats in-game chip amounts (chain sessions: uchip -> CHIP).
   fmt: (amount: number) => string;
 }> = ({
   t,
@@ -122,130 +113,172 @@ export const ThTable: React.FC<{
   };
 
   return (
-    <div style={felt}>
-      <b>
-        Hand {t.handNumber ?? 1} — {PHASE_NAMES[t.phase ?? 0]} · pot{" "}
-        {fmt(t.pot ?? 0)}
-        {t.currentBet ? ` · bet ${fmt(t.currentBet)}` : ""}
-        {t.dealing ? " · dealing…" : ""}
-        {t.button === me ? " · you have the button" : ""}
-      </b>
+    <div className="col" style={{ gap: 14 }}>
+      <div className="felt col" style={{ gap: 14 }}>
+        <div className="row wrap">
+          <span className="pot num">
+            Pot {fmt(t.pot ?? 0)}
+            {t.currentBet ? ` · bet ${fmt(t.currentBet)}` : ""}
+          </span>
+          <span className="tag">
+            Hand {t.handNumber ?? 1} · {PHASE_NAMES[t.phase ?? 0]}
+          </span>
+          {t.dealing && <span className="tag">dealing…</span>}
+          {t.button === me && <span className="tag">you have the button</span>}
+        </div>
 
-      <div style={seatPlate}>
-        <span style={feltMuted}>opponent</span> · stack {fmt(opp?.stack ?? 0)}
-        {opp?.committedRound ? ` · in ${fmt(opp.committedRound)}` : ""}
-        {opp?.folded ? " · folded" : ""}
-        {opp?.allIn ? " · ALL-IN" : ""}
-        <div style={{ marginTop: "0.25rem" }}>
+        <Seat
+          title="Opponent"
+          subtitle={opp?.committedRound ? `in ${fmt(opp.committedRound)}` : ""}
+          stack={fmt(opp?.stack ?? 0)}
+          active={!myTurn && stage === "playing"}
+          folded={opp?.folded}
+          badges={
+            <>
+              {opp?.allIn && <span className="badge badge-allin">ALL-IN</span>}
+              {opp?.folded && <span className="badge">folded</span>}
+              {t.button === peer && <span className="badge badge-btn">D</span>}
+            </>
+          }
+        >
           {t.peerHoleCards && t.peerHoleCards.length > 0 ? (
-            <Cards cards={t.peerHoleCards} empty="" />
+            <Cards cards={t.peerHoleCards} />
           ) : (
             <CardBacks count={2} />
           )}
-        </div>
-      </div>
+        </Seat>
 
-      <div style={{ margin: "0.5rem 0" }}>
-        <span style={feltMuted}>board </span>
-        <Cards cards={t.communityCards} empty="(no cards yet)" />
-      </div>
-
-      <div style={seatPlate}>
-        <span style={feltMuted}>me</span> (
-        {matched?.meFirst ? "first" : "second"}) · stack {fmt(my?.stack ?? 0)}
-        {my?.committedRound ? ` · in ${fmt(my.committedRound)}` : ""}
-        {my?.folded ? " · folded" : ""}
-        {my?.allIn ? " · ALL-IN" : ""}
-        {myTurn ? <span style={turnMark}> ← your turn</span> : null}
-        <div style={{ marginTop: "0.25rem" }}>
-          <Cards cards={t.myHoleCards} empty="(dealing…)" />
-        </div>
-      </div>
-
-      <ResultBanner
-        t={t}
-        text={`hand ${t.handsPlayed ?? 0} settled${
-          standings ? ` — ${standings} (${outcome})` : ""
-        }`}
-      />
-
-      {stage === "playing" ? (
-        <div style={{ ...styles.row, marginTop: "0.5rem" }}>
-          <button disabled={!myTurn} onClick={() => act(PokerActionKind.Fold)}>
-            Fold
-          </button>
-          <button
-            disabled={!myTurn || toCall > 0}
-            onClick={() => act(PokerActionKind.Check)}
-          >
-            Check
-          </button>
-          <button
-            disabled={!myTurn || toCall === 0}
-            onClick={() => act(PokerActionKind.Call)}
-          >
-            Call {toCall > 0 ? fmt(toCall) : ""}
-          </button>
-        </div>
-      ) : null}
-
-      {stage === "playing" && bounds.hasBet ? (
-        <div style={{ ...styles.row, marginTop: "0.4rem" }}>
-          <input
-            type="range"
-            min={bounds.minTarget}
-            max={bounds.maxTarget}
-            value={clamped}
-            onChange={(e) => setAmount(parseInt(e.target.value, 10))}
-            disabled={!myTurn}
-            style={{ width: "12rem" }}
-          />
-          <input
-            style={{ ...styles.input, width: "6rem" }}
-            value={String(clamped)}
-            onChange={(e) => setAmount(parseInt(e.target.value, 10) || 0)}
-            disabled={!myTurn}
-          />
-          <button disabled={!myTurn} onClick={submitBet}>
-            {atAllIn
-              ? `All-in · pays ${fmt(cost)}`
-              : isRaise
-              ? `Raise to ${fmt(clamped)} · pays ${fmt(cost)}`
-              : `Bet ${fmt(clamped)}`}
-          </button>
-          <span style={feltMuted}>
-            {fmt(bounds.minTarget)} – {fmt(bounds.maxTarget)}
-            {bounds.maxIsTrueAllIn ? " (all-in)" : ""}
+        <div className="col" style={{ gap: 6 }}>
+          <span className="tiny" style={{ opacity: 0.7 }}>
+            BOARD
           </span>
+          <div className="cards-row">
+            <Cards cards={t.communityCards} slots={5} />
+          </div>
         </div>
-      ) : null}
 
-      {stage === "playing" ? (
-        <div style={{ marginTop: "0.4rem" }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={!continueWish}
-              onChange={(e) => setContinueWish(!e.target.checked)}
-            />{" "}
-            Leave after this hand
-            {!continueWish ? " (session ends at this hand's settlement)" : ""}
-          </label>
-        </div>
-      ) : null}
+        <Seat
+          title={`You (${matched?.meFirst ? "first" : "second"})`}
+          subtitle={my?.committedRound ? `in ${fmt(my.committedRound)}` : ""}
+          stack={fmt(my?.stack ?? 0)}
+          active={myTurn}
+          folded={my?.folded}
+          badges={
+            <>
+              {myTurn && <span className="badge">your turn</span>}
+              {my?.allIn && <span className="badge badge-allin">ALL-IN</span>}
+              {my?.folded && <span className="badge">folded</span>}
+              {t.button === me && <span className="badge badge-btn">D</span>}
+            </>
+          }
+        >
+          {t.myHoleCards && t.myHoleCards.length > 0 ? (
+            <Cards cards={t.myHoleCards} />
+          ) : (
+            <CardBacks count={2} />
+          )}
+        </Seat>
+
+        <ResultBanner
+          t={t}
+          text={`Hand ${t.handsPlayed ?? 0} settled${
+            standings ? ` — ${standings} (${outcome})` : ""
+          }`}
+        />
+      </div>
+
+      {stage === "playing" && (
+        <>
+          <div className="actionbar">
+            <button
+              className="btn"
+              disabled={!myTurn}
+              onClick={() => act(PokerActionKind.Fold)}
+            >
+              Fold
+            </button>
+            <button
+              className="btn"
+              disabled={!myTurn || toCall > 0}
+              onClick={() => act(PokerActionKind.Check)}
+            >
+              Check
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={!myTurn || toCall === 0}
+              onClick={() => act(PokerActionKind.Call)}
+            >
+              Call {toCall > 0 ? fmt(toCall) : ""}
+            </button>
+
+            {bounds.hasBet && (
+              <div className="raise">
+                <input
+                  type="range"
+                  min={bounds.minTarget}
+                  max={bounds.maxTarget}
+                  value={clamped}
+                  onChange={(e) => setAmount(parseInt(e.target.value, 10))}
+                  disabled={!myTurn}
+                  aria-label="bet amount"
+                />
+                <QuickSizes
+                  bounds={bounds}
+                  pot={t.pot ?? 0}
+                  disabled={!myTurn}
+                  onPick={setAmount}
+                />
+                <button
+                  className="btn btn-primary"
+                  disabled={!myTurn}
+                  onClick={submitBet}
+                >
+                  {atAllIn
+                    ? `All-in · ${fmt(cost)}`
+                    : isRaise
+                    ? `Raise to ${fmt(clamped)}`
+                    : `Bet ${fmt(clamped)}`}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="row small faint">
+            {bounds.hasBet && (
+              <span className="num">
+                {fmt(bounds.minTarget)} – {fmt(bounds.maxTarget)}
+                {bounds.maxIsTrueAllIn ? " (all-in)" : ""}
+                {!atAllIn && isRaise ? ` · pays ${fmt(cost)}` : ""}
+              </span>
+            )}
+            <label className="check right">
+              <input
+                type="checkbox"
+                checked={!continueWish}
+                onChange={(e) => setContinueWish(!e.target.checked)}
+              />
+              <span>
+                Leave after this hand
+                {!continueWish ? " (ends at this hand's settlement)" : ""}
+              </span>
+            </label>
+          </div>
+        </>
+      )}
 
       <SessionStrip snapshot={snapshot} standings={standings} />
 
-      {stage === "done" && standings ? (
-        <div style={{ ...turnMark, marginTop: "0.5rem" }} data-testid="result">
-          settled: {standings} —{" "}
+      {stage === "done" && standings && (
+        <div className="notice" data-testid="result">
+          <b className="ok">settled: {standings}</b> —{" "}
           {outcome === "you are ahead"
             ? "you win"
             : outcome === "opponent is ahead"
             ? "opponent wins"
             : "split pot"}
         </div>
-      ) : null}
+      )}
     </div>
   );
 };

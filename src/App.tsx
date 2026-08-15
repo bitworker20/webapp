@@ -1,58 +1,63 @@
-// Web client shell: risk gate -> key import -> the shared poker page.
+// The web client: risk gate -> account -> a wallet that can also play poker.
 //
-// The only thing this file adds over the extension's entry point is key
-// custody and the warnings that go with it. Everything below the bridge is the
-// same code the extension runs (webapp/src/poker, aliased there as
-// @bitpoker/poker-core).
+// Everything the app needs that outlives a screen lives here — the key holder,
+// the wallet bridge, the balance poll and the game session — so switching
+// between the wallet and the table never interrupts a hand.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { PokerPage } from "./poker/page";
 import { fetchUchipBalance } from "@bitpoker/poker-session/lobby";
-import { formatChip, uchipLessThan } from "@bitpoker/poker-session/chip";
-import { decryptArmoredPrivKey } from "./wallet/armor";
-import { KeyHolder, deriveIdentity } from "./wallet/key-holder";
-import {
-  generateMnemonic,
-  mnemonicToPrivKey,
-  validateMnemonic,
-} from "./wallet/mnemonic";
+import { uchipLessThan } from "@bitpoker/poker-session/chip";
+import { fetchNodeGasPrice } from "@bitpoker/poker-session/fees";
+import { KeyHolder } from "./wallet/key-holder";
 import {
   BrowserKeyBridge,
   IntentApprovalRequest,
 } from "./wallet/browser-key-bridge";
+import { usePokerSession } from "./poker/session";
 import {
   BECH32_PREFIX,
-  CHAIN_ID,
   DEFAULT_LCD_URL,
-  DEFAULT_RELAY_URL,
   OVERFUNDED_WARNING_UCHIP,
 } from "./config";
+import { AccountEntry, RiskGate } from "./ui/onboarding";
 import {
-  DESKTOP_CLIENT_NOTE,
   IntentApproval,
-  RiskGate,
+  Nav,
   TestnetBanner,
-  styles,
-} from "./ui/chrome";
+  TopBar,
+  ViewId,
+} from "./ui/shell";
+import { WalletView } from "./ui/wallet-view";
+import { PlayView } from "./ui/play-view";
+import { TableView } from "./ui/table-view";
+import { ActivityView } from "./ui/activity-view";
+import { SettingsView } from "./ui/settings-view";
+import "./app.css";
 
 interface PendingApproval {
   request: IntentApprovalRequest;
   decide: (approved: boolean) => void;
 }
 
+const TITLES: Record<ViewId | "table", string> = {
+  play: "Play",
+  table: "Table",
+  wallet: "Wallet",
+  activity: "Activity",
+  settings: "Settings",
+};
+
 export const App: React.FC = () => {
   const [acknowledged, setAcknowledged] = useState(false);
   const [address, setAddress] = useState("");
-  const [lcdUrl, setLcdUrl] = useState(DEFAULT_LCD_URL);
-  const [balanceUchip, setBalanceUchip] = useState("");
-  const [pendingApproval, setPendingApproval] = useState<PendingApproval>();
 
   const keyHolder = useMemo(() => new KeyHolder(BECH32_PREFIX), []);
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval>();
   const wallet = useMemo(
     () =>
       new BrowserKeyBridge({
         keyHolder,
         lcdUrl: DEFAULT_LCD_URL,
-        // Resolve the promise from the modal's buttons.
+        // Resolved by the modal's buttons.
         onApproveIntent: (request) =>
           new Promise<boolean>((resolve) => {
             setPendingApproval({
@@ -67,26 +72,62 @@ export const App: React.FC = () => {
     [keyHolder]
   );
 
-  // The page owns the LCD field; keep the bridge's broadcast endpoint on it.
-  useEffect(() => {
-    wallet.setLcdUrl(lcdUrl);
-  }, [wallet, lcdUrl]);
+  if (!acknowledged) {
+    return <RiskGate onAccept={() => setAcknowledged(true)} />;
+  }
+  if (!address) {
+    return <AccountEntry keyHolder={keyHolder} onLoaded={setAddress} />;
+  }
+  return (
+    <>
+      <SignedIn
+        wallet={wallet}
+        address={address}
+        onClearKey={() => {
+          keyHolder.unload();
+          setAddress("");
+        }}
+      />
+      {pendingApproval && (
+        <IntentApproval
+          request={pendingApproval.request}
+          onDecide={pendingApproval.decide}
+        />
+      )}
+    </>
+  );
+};
 
+const SignedIn: React.FC<{
+  wallet: BrowserKeyBridge;
+  address: string;
+  onClearKey: () => void;
+}> = ({ wallet, address, onClearKey }) => {
+  const [view, setView] = useState<ViewId>("play");
+  const [atTable, setAtTable] = useState(false);
+  const [playerName, setPlayerName] = useState("WebPlayer");
+  const [balanceUchip, setBalanceUchip] = useState("");
+  const [reachable, setReachable] = useState(true);
+  const [gasPrice, setGasPrice] = useState<string>();
+  // Bumped whenever something should have changed the account's history.
+  const [ledgerKey, setLedgerKey] = useState(0);
+
+  const session = usePokerSession(wallet);
+
+  // Balance poll: the one number every screen shows, so it is polled once here
+  // rather than by each of them.
   useEffect(() => {
-    if (!address) {
-      setBalanceUchip("");
-      return;
-    }
     let alive = true;
     const load = async () => {
       try {
-        const balance = await fetchUchipBalance(lcdUrl, address);
+        const balance = await fetchUchipBalance(DEFAULT_LCD_URL, address);
         if (alive) {
           setBalanceUchip(balance);
+          setReachable(true);
         }
       } catch {
         if (alive) {
-          setBalanceUchip("");
+          setReachable(false);
         }
       }
     };
@@ -96,420 +137,111 @@ export const App: React.FC = () => {
       alive = false;
       clearInterval(timer);
     };
-  }, [address, lcdUrl]);
+  }, [address, ledgerKey]);
 
-  const onClearKey = useCallback(() => {
-    keyHolder.unload();
-    setAddress("");
-  }, [keyHolder]);
+  // What the node charges, for the settings screen. The send flow asks again
+  // per transfer; this is only to show the player what they are paying.
+  useEffect(() => {
+    let alive = true;
+    void fetchNodeGasPrice(DEFAULT_LCD_URL, "uchip").then((price) => {
+      if (alive) {
+        setGasPrice(
+          price
+            ? price.amount === "0"
+              ? "free (node charges nothing)"
+              : `${price.amount} ${price.denom} / gas`
+            : "not advertised by this node"
+        );
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  if (!acknowledged) {
-    return <RiskGate onAccept={() => setAcknowledged(true)} />;
-  }
+  // A finished session is worth a history refresh: the settlement moved money.
+  const stage = session.snapshot.stage;
+  useEffect(() => {
+    if (["done", "disputed"].includes(stage)) {
+      setLedgerKey((n) => n + 1);
+    }
+  }, [stage]);
 
-  if (!address) {
-    return (
-      <KeyImport keyHolder={keyHolder} onLoaded={setAddress} />
-    );
-  }
+  const goPlay = useCallback(() => {
+    setView("play");
+    setAtTable(true);
+  }, []);
+
+  const leaveTable = useCallback(() => {
+    session.clear();
+    setAtTable(false);
+  }, [session]);
 
   const overFunded =
     balanceUchip !== "" &&
     !uchipLessThan(balanceUchip, OVERFUNDED_WARNING_UCHIP);
 
+  // The table takes over the Play slot while a session is live, so a player
+  // cannot wander back to the lobby and open a second intent mid-hand.
+  const showTable = view === "play" && (atTable || session.active);
+
   return (
-    <>
-      <PokerPage
-        wallet={wallet}
-        chainId={CHAIN_ID}
-        defaults={{
-          lcdUrl,
-          relayUrl: DEFAULT_RELAY_URL,
-          playerName: "WebPlayer",
+    <div className="shell">
+      <Nav
+        view={view}
+        onView={(next) => {
+          setView(next);
+          if (next === "play" && session.active) {
+            setAtTable(true);
+          }
         }}
-        onLcdUrlChange={setLcdUrl}
-        endpointsFixed
-        banner={
-          <TestnetBanner
-            address={address}
-            balanceLabel={
-              balanceUchip === "" ? undefined : `${formatChip(balanceUchip)} CHIP`
-            }
-            overFunded={overFunded}
-            onClearKey={onClearKey}
-          />
-        }
+        gameLive={session.busy}
       />
-      {pendingApproval && (
-        <IntentApproval
-          request={pendingApproval.request}
-          formatStake={(uchip) => `${formatChip(uchip)} CHIP`}
-          onDecide={pendingApproval.decide}
-        />
-      )}
-    </>
-  );
-};
-
-type EntryTab = "create" | "recover" | "file";
-
-const TABS: ReadonlyArray<{ id: EntryTab; label: string }> = [
-  { id: "create", label: "Create account" },
-  { id: "recover", label: "Recover" },
-  { id: "file", label: "Key file" },
-];
-
-// Three ways in, and "create" is first on purpose: a browser visitor has no
-// node, so telling them to run `pokerchaind keys export` was a dead end for
-// everyone who did not already have the chain installed.
-const KeyImport: React.FC<{
-  keyHolder: KeyHolder;
-  onLoaded: (address: string) => void;
-}> = ({ keyHolder, onLoaded }) => {
-  const [tab, setTab] = useState<EntryTab>("create");
-
-  return (
-    <div style={styles.screen}>
-      <div style={styles.panel}>
-        <h1 style={{ marginTop: 0 }}>Get a testnet account</h1>
-        <p style={{ opacity: 0.8 }}>
-          The key is used here in your browser and never uploaded — but it does
-          stay in this tab&apos;s memory until you clear it or close the tab.{" "}
-          {DESKTOP_CLIENT_NOTE}
-        </p>
-
-        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-          {TABS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              style={tab === id ? styles.primary : styles.secondary}
-              data-testid={`tab-${id}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {tab === "create" && (
-          <CreateAccount keyHolder={keyHolder} onLoaded={onLoaded} />
-        )}
-        {tab === "recover" && (
-          <RecoverAccount keyHolder={keyHolder} onLoaded={onLoaded} />
-        )}
-        {tab === "file" && (
-          <KeyFileImport keyHolder={keyHolder} onLoaded={onLoaded} />
-        )}
-      </div>
-    </div>
-  );
-};
-
-// A new account is empty, and there is no faucet, so say so here rather than
-// let the player discover it at the lobby when every stake is unaffordable.
-const FUNDING_NOTE =
-  "A new account starts with no CHIP. Ask whoever runs this testnet to send some to the address above before you sit down.";
-
-const CreateAccount: React.FC<{
-  keyHolder: KeyHolder;
-  onLoaded: (address: string) => void;
-}> = ({ keyHolder, onLoaded }) => {
-  const [mnemonic, setMnemonic] = useState("");
-  const [written, setWritten] = useState(false);
-  const [error, setError] = useState("");
-
-  // Derived, not stored: the address is a pure function of the words on screen,
-  // and keeping it in state would be one more copy to clear.
-  const address = useMemo(() => {
-    if (!mnemonic) {
-      return "";
-    }
-    try {
-      const priv = mnemonicToPrivKey(mnemonic);
-      const identity = deriveIdentity(priv, BECH32_PREFIX);
-      priv.fill(0);
-      return identity.bech32Address;
-    } catch {
-      return "";
-    }
-  }, [mnemonic]);
-
-  const onGenerate = useCallback(() => {
-    setError("");
-    setWritten(false);
-    setMnemonic(generateMnemonic());
-  }, []);
-
-  const onUse = useCallback(() => {
-    setError("");
-    try {
-      const identity = keyHolder.load(mnemonicToPrivKey(mnemonic));
-      setMnemonic("");
-      onLoaded(identity.bech32Address);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [mnemonic, keyHolder, onLoaded]);
-
-  return (
-    <div>
-      <p style={{ opacity: 0.8 }}>
-        Creates a standard cosmos account (24 words, path{" "}
-        <code>m/44&apos;/118&apos;/0&apos;/0/0</code>). The same words recover
-        the same account in the desktop and mobile clients, in Keplr, and with{" "}
-        <code>pokerchaind keys add --recover</code>.
-      </p>
-
-      {!mnemonic && (
-        <button
-          style={styles.primary}
-          onClick={onGenerate}
-          data-testid="create-generate"
+      <div className="main">
+        <TestnetBanner overFunded={overFunded} onClearKey={onClearKey} />
+        <TopBar
+          title={TITLES[showTable ? "table" : view]}
+          address={address}
+          balanceUchip={balanceUchip}
+          chainReachable={reachable}
         >
-          Generate a new account
-        </button>
-      )}
-
-      {mnemonic && (
-        <>
-          <p style={{ ...styles.error, opacity: 1 }}>
-            Write these 24 words down now. They are not saved anywhere — close
-            this tab without them and the account is gone for good.
-          </p>
-          <ol
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(9rem, 1fr))",
-              gap: "0.25rem 0.75rem",
-              fontFamily: "monospace",
-              background: "#0c0a09",
-              borderRadius: 6,
-              padding: "0.75rem 0.75rem 0.75rem 2.5rem",
-            }}
-            data-testid="create-mnemonic"
-          >
-            {mnemonic.split(" ").map((word, i) => (
-              <li key={`${i}-${word}`}>{word}</li>
-            ))}
-          </ol>
-
-          <div style={{ marginTop: "0.75rem", fontSize: "0.85rem" }}>
-            Address: <code data-testid="create-address">{address}</code>
-          </div>
-          <p style={{ opacity: 0.75, fontSize: "0.85rem" }}>{FUNDING_NOTE}</p>
-
-          <label
-            style={{ ...styles.field, display: "flex", gap: "0.5rem" }}
-          >
-            <input
-              type="checkbox"
-              checked={written}
-              onChange={(e) => setWritten(e.target.checked)}
-              data-testid="create-ack"
-            />
-            I have written down these 24 words
-          </label>
-
-          <div style={{ marginTop: "1.2rem", display: "flex", gap: "0.5rem" }}>
-            <button
-              style={{ ...styles.primary, opacity: written ? 1 : 0.5 }}
-              onClick={onUse}
-              disabled={!written}
-              data-testid="create-use"
-            >
-              Use this account
+          {showTable && !session.busy && (
+            <button className="btn btn-ghost btn-sm" onClick={leaveTable}>
+              Leave table
             </button>
-            <button style={styles.secondary} onClick={onGenerate}>
-              Generate a different one
-            </button>
-          </div>
-        </>
-      )}
+          )}
+        </TopBar>
 
-      {error && (
-        <p style={styles.error} data-testid="key-error">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-};
-
-const RecoverAccount: React.FC<{
-  keyHolder: KeyHolder;
-  onLoaded: (address: string) => void;
-}> = ({ keyHolder, onLoaded }) => {
-  const [mnemonic, setMnemonic] = useState("");
-  const [error, setError] = useState("");
-
-  // Previewing the address before committing turns "wrong account" from a
-  // discovery at the lobby into something the player sees while typing.
-  const preview = useMemo(() => {
-    if (!validateMnemonic(mnemonic)) {
-      return "";
-    }
-    try {
-      const priv = mnemonicToPrivKey(mnemonic);
-      const identity = deriveIdentity(priv, BECH32_PREFIX);
-      priv.fill(0);
-      return identity.bech32Address;
-    } catch {
-      return "";
-    }
-  }, [mnemonic]);
-
-  const onRecover = useCallback(() => {
-    setError("");
-    try {
-      const identity = keyHolder.load(mnemonicToPrivKey(mnemonic));
-      setMnemonic("");
-      onLoaded(identity.bech32Address);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [mnemonic, keyHolder, onLoaded]);
-
-  return (
-    <div>
-      <p style={{ opacity: 0.8 }}>
-        Paste the 12 or 24 words from another BitPoker client, Keplr, or{" "}
-        <code>pokerchaind keys add</code>. Spacing and capitalisation do not
-        matter.
-      </p>
-
-      <label style={styles.field}>
-        Recovery phrase
-        <textarea
-          value={mnemonic}
-          onChange={(e) => setMnemonic(e.target.value)}
-          rows={3}
-          style={{ ...styles.input, fontFamily: "monospace" }}
-          data-testid="recover-mnemonic"
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </label>
-
-      <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", opacity: 0.8 }}>
-        {preview ? (
-          <>
-            Account: <code data-testid="recover-address">{preview}</code>
-          </>
+        {showTable ? (
+          <TableView session={session} onLeave={leaveTable} />
+        ) : view === "play" ? (
+          <PlayView
+            session={session}
+            address={address}
+            playerName={playerName}
+            balanceUchip={balanceUchip}
+            onEnterTable={goPlay}
+          />
+        ) : view === "wallet" ? (
+          <WalletView
+            wallet={wallet}
+            address={address}
+            balanceUchip={balanceUchip}
+            onSent={() => setLedgerKey((n) => n + 1)}
+          />
+        ) : view === "activity" ? (
+          <ActivityView address={address} reloadKey={ledgerKey} />
         ) : (
-          "Enter a valid recovery phrase to see its address."
+          <SettingsView
+            session={session}
+            wallet={wallet}
+            playerName={playerName}
+            onPlayerName={setPlayerName}
+            onClearKey={onClearKey}
+            gasPrice={gasPrice}
+          />
         )}
       </div>
-
-      <div style={{ marginTop: "1.2rem" }}>
-        <button
-          style={{ ...styles.primary, opacity: preview ? 1 : 0.5 }}
-          onClick={onRecover}
-          disabled={!preview}
-          data-testid="recover-use"
-        >
-          Recover account
-        </button>
-      </div>
-
-      {error && (
-        <p style={styles.error} data-testid="key-error">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-};
-
-const KeyFileImport: React.FC<{
-  keyHolder: KeyHolder;
-  onLoaded: (address: string) => void;
-}> = ({ keyHolder, onLoaded }) => {
-  const [armor, setArmor] = useState("");
-  const [fileName, setFileName] = useState("");
-  const [passphrase, setPassphrase] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const onFile = useCallback(async (file: File | undefined) => {
-    if (!file) {
-      return;
-    }
-    setArmor(await file.text());
-    setFileName(file.name);
-    setError("");
-  }, []);
-
-  const onImport = useCallback(async () => {
-    setBusy(true);
-    setError("");
-    try {
-      // argon2id takes ~0.5s and blocks this thread; yield once so the button
-      // repaints as disabled. Moving it to a worker is a follow-up.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const { privKey } = decryptArmoredPrivKey(armor, passphrase);
-      const identity = keyHolder.load(privKey);
-      // Do not keep the passphrase or the armored blob around after use.
-      setPassphrase("");
-      setArmor("");
-      onLoaded(identity.bech32Address);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [armor, passphrase, keyHolder, onLoaded]);
-
-  return (
-    <div>
-      <p style={{ opacity: 0.8 }}>
-        Export one from a node with{" "}
-        <code>pokerchaind keys export &lt;name&gt;</code> and save the output to
-        a file.
-      </p>
-
-      <label style={styles.field}>
-        Key file
-        <input
-          type="file"
-          accept=".txt,.asc,.key,text/plain"
-          onChange={(e) => void onFile(e.target.files?.[0])}
-          style={styles.input}
-          data-testid="key-file"
-        />
-      </label>
-      {fileName && (
-        <div style={{ fontSize: "0.8rem", opacity: 0.7 }}>
-          loaded <code>{fileName}</code>
-        </div>
-      )}
-
-      <label style={styles.field}>
-        Passphrase
-        <input
-          type="password"
-          value={passphrase}
-          onChange={(e) => setPassphrase(e.target.value)}
-          style={styles.input}
-          data-testid="key-passphrase"
-        />
-      </label>
-
-      <div style={{ marginTop: "1.2rem" }}>
-        <button
-          style={{ ...styles.primary, opacity: busy || !armor ? 0.5 : 1 }}
-          onClick={() => void onImport()}
-          disabled={busy || !armor}
-          data-testid="key-import"
-        >
-          {busy ? "Decrypting…" : "Load key"}
-        </button>
-      </div>
-
-      {error && (
-        <p style={styles.error} data-testid="key-error">
-          {error}
-        </p>
-      )}
     </div>
   );
 };

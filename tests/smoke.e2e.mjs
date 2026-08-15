@@ -173,7 +173,9 @@ async function main() {
     );
     await page.click('[data-testid="key-import"]');
 
-    // 5. The banner proves the key decrypted to the expected account.
+    // 5. The app frame proves the key decrypted to the expected account: the
+    //    warning banner is always there, and the account strip carries the
+    //    address it derived.
     try {
       await page.waitForSelector('[data-testid="testnet-banner"]', {
         timeout: 30000,
@@ -189,20 +191,23 @@ async function main() {
           (consoleErrors.length ? ` | page errors: ${consoleErrors.join(" | ")}` : "")
       );
     }
+    const shown = await page.$eval('[data-testid="copy-address"]', (el) =>
+      el.getAttribute("data-address")
+    );
+    if (shown !== FIXTURE_ADDRESS) {
+      fail(`the app shows ${shown}, expected the imported ${FIXTURE_ADDRESS}`);
+    }
     const banner = await page.$eval(
       '[data-testid="testnet-banner"]',
       (el) => el.textContent
     );
-    if (!banner.includes(FIXTURE_ADDRESS)) {
-      fail(`banner does not show the imported account: ${banner}`);
-    }
-    if (!/Testnet key held in this browser tab/.test(banner)) {
-      fail("the testnet warning is missing from the banner");
+    if (!/key/i.test(banner) || !/testnet|browser/i.test(banner)) {
+      fail(`the testnet warning is missing from the banner: ${banner}`);
     }
 
     // 6. gamecore selfTest in the worker — the deployment check.
+    await page.click('[data-testid="nav-settings"]');
     await page.waitForSelector('[data-testid="selftest"]');
-    await page.$eval("details", (d) => d.setAttribute("open", "open"));
     await page.evaluate(() => {
       const button = [...document.querySelectorAll("button")].find((b) =>
         b.textContent.includes("selfTest")

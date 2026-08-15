@@ -16,6 +16,10 @@ export const DEFAULT_LCD_URL =
 export const DEFAULT_RELAY_URL =
   import.meta.env["VITE_RELAY_URL"] ?? "ws://127.0.0.1:19910/relay";
 
+// Said on the risk gate and again in the banner, in the same words both times.
+export const DESKTOP_CLIENT_NOTE =
+  "For real funds use the desktop or mobile client, where the key lives outside the browser.";
+
 // Above this balance the banner turns red and tells the player to move funds
 // out. It is advice, not enforcement — nothing stops a player using a rich
 // account, but nothing should let them do it without noticing either.

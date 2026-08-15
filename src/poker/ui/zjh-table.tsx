@@ -11,19 +11,11 @@ import {
   computeBetBounds,
 } from "@bitpoker/poker-session/bet-bounds";
 import { Cards, CardBacks } from "./cards";
-import { styles } from "./styles";
-import {
-  ResultBanner,
-  SessionStrip,
-  felt,
-  feltMuted,
-  seatPlate,
-  turnMark,
-} from "./table-chrome";
+import { QuickSizes, ResultBanner, Seat, SessionStrip } from "./table-chrome";
 
-// ZhaJinHua (three-card brag) table on the shared felt chrome: 3 private
-// cards, ante/pot/dark-bet, bounds-validated raise levels, and the
-// look/call/raise/compare/fold action bar.
+// ZhaJinHua (three-card brag): three private cards, blind/looked betting where
+// looking doubles what a call costs, and compare as the way to force a
+// showdown.
 export const ZjhTable: React.FC<{
   t: TableState;
   me: number;
@@ -53,9 +45,9 @@ export const ZjhTable: React.FC<{
   const darkBet = t.currentDarkBet ?? 0;
   const myCallCost = darkBet * (looked ? 2 : 1);
 
-  // Session standings (matchmaking order) double as the ZJH stack source:
-  // the ZJH table state has no per-seat stack, but stack = session chips
-  // carried into this hand minus what this hand has committed.
+  // Session standings (matchmaking order) double as the ZJH stack source: the
+  // ZJH table state has no per-seat stack, but stack = session chips carried
+  // into this hand minus what this hand has committed.
   const mySession = matched?.meFirst
     ? t.sessionFirstChips
     : t.sessionSecondChips;
@@ -100,126 +92,170 @@ export const ZjhTable: React.FC<{
       : undefined;
 
   return (
-    <div style={felt}>
-      <b>
-        ZhaJinHua · Hand {t.handNumber ?? 1} · ante {fmt(t.ante ?? 0)} · pot{" "}
-        {fmt(t.pot ?? 0)}
-        {t.dealing ? " · dealing…" : ` · dark bet ${fmt(darkBet)}`}
-        {t.button === me ? " · you deal" : ""}
-      </b>
+    <div className="col" style={{ gap: 14 }}>
+      <div className="felt col" style={{ gap: 14 }}>
+        <div className="row wrap">
+          <span className="pot num">Pot {fmt(t.pot ?? 0)}</span>
+          <span className="tag tag-zjh">ZhaJinHua 三张</span>
+          <span className="tag">Hand {t.handNumber ?? 1}</span>
+          <span className="tag num">ante {fmt(t.ante ?? 0)}</span>
+          {t.dealing ? (
+            <span className="tag">dealing…</span>
+          ) : (
+            <span className="tag num">dark bet {fmt(darkBet)}</span>
+          )}
+          {t.button === me && <span className="tag">you deal</span>}
+        </div>
 
-      <div style={seatPlate}>
-        <span style={feltMuted}>opponent</span> ·{" "}
-        {opp?.looked ? "looked" : "blind"}
-        {opp?.folded ? " · folded" : ""} · in pot {fmt(opp?.committed ?? 0)} ·
-        stack {fmt(oppStack)}
-        <div style={{ marginTop: "0.25rem" }}>
+        <Seat
+          title="Opponent"
+          subtitle={`${opp?.looked ? "looked" : "blind"} · in pot ${fmt(
+            opp?.committed ?? 0
+          )}`}
+          stack={fmt(oppStack)}
+          active={!myTurn && stage === "playing"}
+          folded={opp?.folded}
+          badges={
+            <>
+              {opp?.looked && <span className="badge">looked</span>}
+              {opp?.folded && <span className="badge">folded</span>}
+            </>
+          }
+        >
           {t.peerCards && t.peerCards.length > 0 ? (
-            <Cards cards={t.peerCards} empty="" />
+            <Cards cards={t.peerCards} />
           ) : (
             <CardBacks count={3} />
           )}
-        </div>
-      </div>
+        </Seat>
 
-      <div style={seatPlate}>
-        <span style={feltMuted}>me</span> (
-        {matched?.meFirst ? "first" : "second"}
-        {looked ? ", looked" : ", blind"}
-        {my?.folded ? ", folded" : ""}) · in pot {fmt(my?.committed ?? 0)} ·
-        stack {fmt(myStack)}
-        {myTurn ? <span style={turnMark}> ← your turn</span> : null}
-        <div style={{ marginTop: "0.25rem" }}>
+        <Seat
+          title={`You (${matched?.meFirst ? "first" : "second"})`}
+          subtitle={`${looked ? "looked" : "blind"} · in pot ${fmt(
+            my?.committed ?? 0
+          )}`}
+          stack={fmt(myStack)}
+          active={myTurn}
+          folded={my?.folded}
+          badges={
+            <>
+              {myTurn && <span className="badge">your turn</span>}
+              {my?.folded && <span className="badge">folded</span>}
+            </>
+          }
+        >
           {t.myCards && t.myCards.length > 0 ? (
-            <Cards cards={t.myCards} empty="" />
+            <Cards cards={t.myCards} />
           ) : looked ? (
-            <span style={feltMuted}>(revealing…)</span>
+            <span className="tiny" style={{ opacity: 0.7 }}>
+              revealing…
+            </span>
           ) : (
             <CardBacks count={3} />
           )}
-        </div>
+        </Seat>
+
+        <ResultBanner
+          t={t}
+          text={`Hand ${t.handsPlayed ?? 0} settled${
+            standings ? ` — ${standings}` : ""
+          }`}
+        />
       </div>
 
-      <ResultBanner
-        t={t}
-        text={`hand ${t.handsPlayed ?? 0} settled${
-          standings ? ` — ${standings}` : ""
-        }`}
-      />
-
-      {stage === "playing" ? (
-        <React.Fragment>
-          <div style={{ ...styles.row, marginTop: "0.5rem" }}>
-            <button disabled={!myTurn} onClick={() => act(ZjhActionKind.Fold)}>
+      {stage === "playing" && (
+        <>
+          <div className="actionbar">
+            <button
+              className="btn"
+              disabled={!myTurn}
+              onClick={() => act(ZjhActionKind.Fold)}
+            >
               Fold
             </button>
             <button
+              className="btn"
               disabled={!myTurn || looked}
               onClick={() => act(ZjhActionKind.Look)}
+              title="Looking doubles what every later call costs you"
             >
               Look
             </button>
-            <button disabled={!myTurn} onClick={() => act(ZjhActionKind.Call)}>
+            <button
+              className="btn btn-primary"
+              disabled={!myTurn}
+              onClick={() => act(ZjhActionKind.Call)}
+            >
               Call {myCallCost > 0 ? fmt(myCallCost) : ""}
             </button>
             <button
+              className="btn"
               disabled={!myTurn}
               onClick={() => act(ZjhActionKind.Compare)}
             >
-              Compare (showdown)
+              Compare
             </button>
+
+            {bounds.hasBet && (
+              <div className="raise">
+                <input
+                  type="range"
+                  min={bounds.minTarget}
+                  max={bounds.maxTarget}
+                  value={clamped}
+                  onChange={(e) => setLevel(parseInt(e.target.value, 10))}
+                  disabled={!myTurn}
+                  aria-label="raise level"
+                />
+                <QuickSizes
+                  bounds={bounds}
+                  pot={t.pot ?? 0}
+                  disabled={!myTurn}
+                  onPick={setLevel}
+                />
+                <button
+                  className="btn btn-primary"
+                  disabled={!myTurn}
+                  onClick={() => act(ZjhActionKind.Raise, clamped)}
+                >
+                  Raise to {fmt(clamped)}
+                </button>
+              </div>
+            )}
           </div>
-          {bounds.hasBet ? (
-            <div style={{ ...styles.row, marginTop: "0.4rem" }}>
-              <input
-                type="range"
-                min={bounds.minTarget}
-                max={bounds.maxTarget}
-                value={clamped}
-                onChange={(e) => setLevel(parseInt(e.target.value, 10))}
-                disabled={!myTurn}
-                style={{ width: "12rem" }}
-              />
-              <input
-                style={{ ...styles.input, width: "5rem" }}
-                value={String(clamped)}
-                onChange={(e) => setLevel(parseInt(e.target.value, 10) || 0)}
-                disabled={!myTurn}
-              />
-              <button
-                disabled={!myTurn}
-                onClick={() => act(ZjhActionKind.Raise, clamped)}
-              >
-                Raise to {fmt(clamped)} · pays {fmt(cost)}
+
+          <div className="row small faint">
+            {bounds.hasBet && (
+              <span className="num">
+                {fmt(bounds.minTarget)} – {fmt(bounds.maxTarget)} (top =
+                all-in) · pays {fmt(cost)}
                 {looked ? " (looked ×2)" : ""}
-              </button>
-              <span style={feltMuted}>
-                {fmt(bounds.minTarget)} – {fmt(bounds.maxTarget)} (top = all-in)
               </span>
-            </div>
-          ) : null}
-          <div style={{ marginTop: "0.4rem" }}>
-            <label>
+            )}
+            <label className="check right">
               <input
                 type="checkbox"
                 checked={!continueWish}
                 onChange={(e) => setContinueWish(!e.target.checked)}
-              />{" "}
-              Leave after this hand
-              {!continueWish ? " (session ends at this hand's settlement)" : ""}
+              />
+              <span>
+                Leave after this hand
+                {!continueWish ? " (ends at this hand's settlement)" : ""}
+              </span>
             </label>
           </div>
-        </React.Fragment>
-      ) : null}
+        </>
+      )}
 
       <SessionStrip snapshot={snapshot} standings={standings} />
 
-      {(stage === "done" || stage === "disputed") && t.showdownComplete ? (
-        <div style={{ ...turnMark, marginTop: "0.5rem" }} data-testid="result">
-          showdown complete — {matched?.meFirst ? "first" : "second"} seat
+      {(stage === "done" || stage === "disputed") && t.showdownComplete && (
+        <div className="notice" data-testid="result">
+          <b className="ok">showdown complete</b> —{" "}
+          {matched?.meFirst ? "first" : "second"} seat
           {standings ? ` · ${standings}` : ""}
         </div>
-      ) : null}
+      )}
     </div>
   );
 };
