@@ -261,6 +261,10 @@ export const PokerPage: React.FC<PokerPageProps> = ({
             </span>
           )}
         </div>
+        {/* The display name at the table — a player setting, unlike the
+            endpoints, so it lives here rather than in the dev block below
+            that both on-chain paths used to borrow it from. */}
+        {field("playerName", "name")}
         <div style={{ margin: "0.5rem 0" }}>
           <b>Open games</b>
           <Lobby
@@ -313,52 +317,59 @@ export const PokerPage: React.FC<PokerPageProps> = ({
       {t?.ready && isZjh ? <ZjhTable t={t} {...tableProps} /> : null}
       {t?.ready && !isZjh ? <ThTable t={t} {...tableProps} /> : null}
 
-      {/* Dev flows: relay-direct play (unsigned-dev auth, hand-shared session
-          id) and the legacy single-stake chain quick start the e2e driver
-          uses. Kept visible — puppeteer cannot click inside a collapsed
-          <details>. */}
-      <div style={styles.block}>
-        <b>Join a table (dev relay-direct)</b>
-        <div>
-          <span style={styles.label}>game</span>
-          <select
-            value={game}
-            onChange={(e) => setGame(e.target.value as PokerGame)}
-            disabled={formLocked}
-          >
-            <option value="TH">Texas Hold&apos;em</option>
-            <option value="ZJH">ZhaJinHua (三张)</option>
-          </select>
-        </div>
-        {field("relayUrl", "relay url", "22rem")}
-        {field("relayId", "relay id")}
-        {field("sessionId", "session id")}
-        {field("playerName", "name")}
-        {field("minBet", "min bet")}
-        {field("maxBet", "max bet")}
-        <button onClick={join} disabled={formLocked}>
-          Join
-        </button>
-      </div>
+      {/* Dev flows: relay-direct play (unsigned-dev auth, a session id the two
+          players share by hand) and the legacy single-stake chain quick start
+          the e2e driver uses. Neither is reachable by a player who just wants
+          a game — the lobby and Create a game above are — and relay-direct in
+          particular bypasses the ADR-007 answer that hands out the real relay
+          address. Hidden wherever the host fixed its endpoints; still visible
+          and expanded in the extension, because puppeteer cannot click inside
+          a collapsed <details>. */}
+      {!endpointsFixed && (
+        <>
+          <div style={styles.block}>
+            <b>Join a table (dev relay-direct)</b>
+            <div>
+              <span style={styles.label}>game</span>
+              <select
+                value={game}
+                onChange={(e) => setGame(e.target.value as PokerGame)}
+                disabled={formLocked}
+              >
+                <option value="TH">Texas Hold&apos;em</option>
+                <option value="ZJH">ZhaJinHua (三张)</option>
+              </select>
+            </div>
+            {field("relayUrl", "relay url", "22rem")}
+            {field("relayId", "relay id")}
+            {field("sessionId", "session id")}
+            {field("minBet", "min bet")}
+            {field("maxBet", "max bet")}
+            <button onClick={join} disabled={formLocked}>
+              Join
+            </button>
+          </div>
 
-      <div style={styles.block}>
-        <b>Play on-chain (legacy quick start)</b>
-        {field("stake", "stake")}
-        <button
-          onClick={() =>
-            void controller.joinChain({
-              lcdUrl: form.lcdUrl,
-              chainId: chainId,
-              playerName: form.playerName,
-              stake: form.stake,
-              game,
-            })
-          }
-          disabled={formLocked}
-        >
-          Play on-chain ({game})
-        </button>
-      </div>
+          <div style={styles.block}>
+            <b>Play on-chain (legacy quick start)</b>
+            {field("stake", "stake")}
+            <button
+              onClick={() =>
+                void controller.joinChain({
+                  lcdUrl: form.lcdUrl,
+                  chainId: chainId,
+                  playerName: form.playerName,
+                  stake: form.stake,
+                  game,
+                })
+              }
+              disabled={formLocked}
+            >
+              Play on-chain ({game})
+            </button>
+          </div>
+        </>
+      )}
 
       <Diagnostics
         controller={controller}
