@@ -22,10 +22,19 @@ import {
   SubmitResultArgs,
   SubmitSecretArgs,
 } from "@bitpoker/poker-session/wallet-bridge";
+import {
+  adjustGas,
+  Coin,
+  feeForGas,
+  fetchNodeGasPrice,
+  GasPrice,
+  simulateGasUsed,
+} from "@bitpoker/poker-session/fees";
 import { KeyHolder, toHex } from "./key-holder";
 import {
   encodeAuthInfo,
   encodeMsgOpenGameIntent,
+  encodeMsgSend,
   encodeMsgSubmitSessionEvidence,
   encodeMsgSubmitSessionResult,
   encodeMsgSubmitSessionSecret,
@@ -33,6 +42,7 @@ import {
   encodeTxBody,
   encodeTxRaw,
   MSG_OPEN_GAME_INTENT_TYPE_URL,
+  MSG_SEND_TYPE_URL,
   MSG_SUBMIT_SESSION_EVIDENCE_TYPE_URL,
   MSG_SUBMIT_SESSION_RESULT_TYPE_URL,
   MSG_SUBMIT_SESSION_SECRET_TYPE_URL,
@@ -51,10 +61,21 @@ const ALLOWED_PAYLOAD_PREFIXES = [
   "bitpoker-session-evidence-v1\n",
 ];
 
-// Matching the extension's background service. Evidence carries the full
-// message-history payload, so it pays a per-byte write cost.
+// Fallbacks only. The gas limit normally comes from simulating the tx against
+// the node (see resolveGasLimit); these are what a tx pays when the node
+// refuses to simulate — the numbers this client used to hard-code, and the
+// ones the extension's background service still does. Evidence carries the
+// full message-history payload, so it pays a per-byte write cost.
 const GAS_LIMIT_DEFAULT = "400000";
 const GAS_LIMIT_EVIDENCE = "3000000";
+
+// A simulated tx is never verified, but the signature slot must exist and be
+// the right length or the ante handler rejects the shape before measuring.
+const DUMMY_SIGNATURE = new Uint8Array(64);
+
+// The denom this wallet holds, and so the one it wants to pay fees in when a
+// node advertises several prices.
+const FEE_DENOM = "uchip";
 
 export interface IntentApprovalRequest {
   chainId: string;
@@ -79,6 +100,10 @@ export interface BrowserKeyBridgeOptions {
 export class BrowserKeyBridge implements PokerWalletBridge {
   protected readonly keyHolder: KeyHolder;
   protected lcdUrl: string;
+  protected gasPrice?: {
+    lcdUrl: string;
+    price: Promise<GasPrice | undefined>;
+  };
   protected readonly onApproveIntent?: (
     request: IntentApprovalRequest
   ) => Promise<boolean>;
@@ -209,6 +234,52 @@ export class BrowserKeyBridge implements PokerWalletBridge {
     );
   }
 
+  // --- wallet operations (not part of PokerWalletBridge) ---------------------
+  //
+  // A plain bank transfer. It is on this class rather than on the shared
+  // PokerWalletBridge interface because it has nothing to do with poker: the
+  // extension's page never sends one, since Keplr already has a send screen.
+
+  async sendCoins(
+    chainId: string,
+    args: { toAddress: string; amount: Coin; memo?: string }
+  ): Promise<PokerTxResult> {
+    const { bech32Address } = await this.getKey(chainId);
+    return this.broadcast(
+      chainId,
+      MSG_SEND_TYPE_URL,
+      encodeMsgSend({
+        fromAddress: bech32Address,
+        toAddress: args.toAddress,
+        amount: [args.amount],
+      }),
+      GAS_LIMIT_DEFAULT,
+      args.memo
+    );
+  }
+
+  // What a transfer would cost, without sending it — so the UI can show the
+  // fee next to the amount instead of surprising the player after the fact.
+  // Same two questions to the chain as the real send, so the preview is the
+  // number that will actually be paid (give or take a sequence bump).
+  async estimateSend(
+    chainId: string,
+    args: { toAddress: string; amount: Coin; memo?: string }
+  ): Promise<{ gasLimit: string; fee?: Coin }> {
+    const { bech32Address } = await this.getKey(chainId);
+    const { sequence } = await this.fetchAccount(bech32Address);
+    const bodyBytes = encodeTxBody(
+      MSG_SEND_TYPE_URL,
+      encodeMsgSend({
+        fromAddress: bech32Address,
+        toAddress: args.toAddress,
+        amount: [args.amount],
+      }),
+      args.memo
+    );
+    return this.resolveCost(bodyBytes, sequence, GAS_LIMIT_DEFAULT);
+  }
+
   // secp256k1 over a 32-byte digest, returned as r(32) || s(32). Cosmos
   // rejects high-S signatures; noble normalises to low-S by default.
   protected signHash(digest: Uint8Array): Uint8Array {
@@ -221,18 +292,25 @@ export class BrowserKeyBridge implements PokerWalletBridge {
     chainId: string,
     typeUrl: string,
     msgValue: Uint8Array,
-    gasLimit: string
+    fallbackGasLimit: string,
+    memo?: string
   ): Promise<PokerTxResult> {
     const identity = this.keyHolder.getIdentity();
     const { accountNumber, sequence } = await this.fetchAccount(
       identity.bech32Address
     );
+    const bodyBytes = encodeTxBody(typeUrl, msgValue, memo);
+    const { gasLimit, fee } = await this.resolveCost(
+      bodyBytes,
+      sequence,
+      fallbackGasLimit
+    );
 
-    const bodyBytes = encodeTxBody(typeUrl, msgValue);
     const authInfoBytes = encodeAuthInfo({
       pubKey: identity.pubKey,
       sequence,
       gasLimit,
+      feeAmount: fee ? [fee] : undefined,
     });
     const signDocBytes = encodeSignDoc({
       bodyBytes,
@@ -247,6 +325,63 @@ export class BrowserKeyBridge implements PokerWalletBridge {
     });
 
     return this.broadcastTxRaw(txRawBytes);
+  }
+
+  // What this tx will cost, both numbers asked of the chain rather than
+  // guessed: gas from a simulated run, price from the node's own config.
+  //
+  // Either question may go unanswered — an older SDK, a gateway that hides the
+  // node service, a simulation the node declines — and neither is worth
+  // failing a transaction over, so each falls back to what this client did
+  // before it learned to ask: the caller's fixed gas limit, and no fee coin.
+  protected async resolveCost(
+    bodyBytes: Uint8Array,
+    sequence: string,
+    fallbackGasLimit: string
+  ): Promise<{ gasLimit: string; fee?: Coin }> {
+    const [gasLimit, price] = await Promise.all([
+      this.resolveGasLimit(bodyBytes, sequence, fallbackGasLimit),
+      this.resolveGasPrice(),
+    ]);
+    return { gasLimit, fee: price ? feeForGas(gasLimit, price) : undefined };
+  }
+
+  protected async resolveGasLimit(
+    bodyBytes: Uint8Array,
+    sequence: string,
+    fallbackGasLimit: string
+  ): Promise<string> {
+    const identity = this.keyHolder.getIdentity();
+    // Gas limit 0 in the simulated tx: the simulation runs on an infinite
+    // meter, and passing the number we are trying to compute would be circular.
+    const authInfoBytes = encodeAuthInfo({
+      pubKey: identity.pubKey,
+      sequence,
+      gasLimit: "0",
+    });
+    try {
+      const used = await simulateGasUsed(
+        this.lcdUrl,
+        base64Encode(
+          encodeTxRaw({ bodyBytes, authInfoBytes, signature: DUMMY_SIGNATURE })
+        )
+      );
+      return adjustGas(used);
+    } catch {
+      return fallbackGasLimit;
+    }
+  }
+
+  // Cached per endpoint: a node's minimum gas price comes from its app.toml
+  // and changes on restart, not between transactions.
+  protected async resolveGasPrice(): Promise<GasPrice | undefined> {
+    if (this.gasPrice?.lcdUrl !== this.lcdUrl) {
+      this.gasPrice = {
+        lcdUrl: this.lcdUrl,
+        price: fetchNodeGasPrice(this.lcdUrl, FEE_DENOM),
+      };
+    }
+    return this.gasPrice.price;
   }
 
   protected async fetchAccount(

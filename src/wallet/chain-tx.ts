@@ -101,6 +101,10 @@ export class ProtoWriter {
 export const POKERCHAIN_GAME_TYPE_ZJH = 2;
 export const POKERCHAIN_GAME_TYPE_TH = 3;
 
+// The one standard-cosmos message this client sends. Everything else here is
+// pokerchain's own.
+export const MSG_SEND_TYPE_URL = "/cosmos.bank.v1beta1.MsgSend";
+
 export const MSG_OPEN_GAME_INTENT_TYPE_URL =
   "/pokerchain.pokerchain.v1.MsgOpenGameIntent";
 export const MSG_SUBMIT_SESSION_RESULT_TYPE_URL =
@@ -109,6 +113,29 @@ export const MSG_SUBMIT_SESSION_EVIDENCE_TYPE_URL =
   "/pokerchain.pokerchain.v1.MsgSubmitSessionEvidence";
 export const MSG_SUBMIT_SESSION_SECRET_TYPE_URL =
   "/pokerchain.pokerchain.v1.MsgSubmitSessionSecret";
+
+// cosmos.base.v1beta1.Coin — amount is the integer base-denom string, never a
+// number: balances outrun float precision.
+export function encodeCoin(coin: { denom: string; amount: string }): Uint8Array {
+  return new ProtoWriter()
+    .string(1, coin.denom)
+    .string(2, coin.amount)
+    .finish();
+}
+
+export function encodeMsgSend(msg: {
+  fromAddress: string;
+  toAddress: string;
+  amount: ReadonlyArray<{ denom: string; amount: string }>;
+}): Uint8Array {
+  const writer = new ProtoWriter()
+    .string(1, msg.fromAddress)
+    .string(2, msg.toAddress);
+  for (const coin of msg.amount) {
+    writer.message(3, encodeCoin(coin));
+  }
+  return writer.finish();
+}
 
 export function encodeMsgOpenGameIntent(msg: {
   creator: string;
@@ -206,12 +233,16 @@ function encodeSecp256k1PubKey(pubKey: Uint8Array): Uint8Array {
 
 export function encodeTxBody(
   typeUrl: string,
-  msgValue: Uint8Array
+  msgValue: Uint8Array,
+  // Only the wallet's own transfers set this. Game messages leave it empty so
+  // their bodies stay identical to the ones the extension's background service
+  // builds — the golden vectors pin both.
+  memo?: string
 ): Uint8Array {
-  // Single message per tx, no memo, no timeout height — matching the
-  // extension's background service so both clients produce identical bodies.
+  // Single message per tx, no timeout height.
   return new ProtoWriter()
     .message(1, encodeAny(typeUrl, msgValue))
+    .string(2, memo)
     .finish();
 }
 
@@ -219,6 +250,10 @@ export function encodeAuthInfo(args: {
   pubKey: Uint8Array;
   sequence: string;
   gasLimit: string;
+  // What the tx pays. Omitted on a chain whose minimum gas price is zero —
+  // see @bitpoker/poker-session/fees, which reads the price off the node
+  // rather than guessing it here.
+  feeAmount?: ReadonlyArray<{ denom: string; amount: string }>;
 }): Uint8Array {
   // ModeInfo{ single: Single{ mode: SIGN_MODE_DIRECT } }
   const single = new ProtoWriter().uint64(1, SIGN_MODE_DIRECT).finish();
@@ -234,10 +269,14 @@ export function encodeAuthInfo(args: {
     .message(2, modeInfo)
     .uint64(3, args.sequence)
     .finish();
-  // Fee carries a gas limit but no amount: pokerchain's dev/testnet gas price
-  // is zero. A chain with a non-zero min gas price would need Coin entries in
-  // field 1 here.
-  const fee = new ProtoWriter().uint64(2, args.gasLimit).finish();
+  // Fee: repeated Coin amount = 1, gas_limit = 2. A zero-min-gas-price chain
+  // gets no coins, which is what this client always sent before it learned to
+  // ask the node.
+  const feeWriter = new ProtoWriter();
+  for (const coin of args.feeAmount ?? []) {
+    feeWriter.message(1, encodeCoin(coin));
+  }
+  const fee = feeWriter.uint64(2, args.gasLimit).finish();
   return new ProtoWriter().message(1, signerInfo).message(2, fee).finish();
 }
 

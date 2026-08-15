@@ -13,7 +13,8 @@
     "build": "npm run stage && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run && npm test --workspace @bitpoker/poker-session",
-    "test:e2e": "node tests/smoke.e2e.mjs"
+    "test:e2e": "node tests/smoke.e2e.mjs",
+    "test:fee": "node tests/chain-fee.e2e.mjs"
   },
   "dependencies": {
     "@bitpoker/poker-session": "*",
