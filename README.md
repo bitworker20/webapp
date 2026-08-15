@@ -14,11 +14,20 @@ mobile client.
 
 ```
 packages/poker-session/  @bitpoker/poker-session — the headless session layer
-src/poker/               this client's poker page and table UI
+src/app.css              design tokens + the component classes the screens use
+src/App.tsx              the shell: gate -> account -> nav + the live session
+src/ui/                  the screens (play, wallet, activity, settings, onboarding)
+src/poker/               the felt table, and the hook that owns the game session
 src/wallet/              key custody: armor import, in-memory key, signing, txs
-src/ui/                  the screens that exist only because the key is in the page
 public/                  staged at build time from the package — nothing tracked
 ```
+
+Four screens: **Play** (open games + create one), **Wallet** (balance, address,
+transfer with a fee quoted by the chain), **Activity** (this account's
+transactions, read from the node's tx index), **Settings** (endpoints the
+deployment fixed, the key, diagnostics). A live session takes over the Play
+screen; the wallet stays reachable mid-hand and the nav shows the table is
+live.
 
 `packages/poker-session/` holds everything that is *not* a matter of taste:
 relay transport, the gamecore wasm worker, the hand state machine, bet bounds,
@@ -82,6 +91,7 @@ npm test          # unit: armor/key custody, tx encoding, bridge signing,
                   #       plus the session package's own specs
 npm run build
 npm run test:e2e  # browser: risk gate -> key import -> gamecore selfTest in the worker
+npm run test:fee  # live chain: the fee this client pays is the one the node asks for
 ```
 
 `npm test` includes two fixtures worth knowing about:
@@ -95,6 +105,11 @@ npm run test:e2e  # browser: risk gate -> key import -> gamecore selfTest in the
   `keplr-wallet/apps/extension/src/poker-tx-vectors.spec.ts`, so the two cannot
   drift on a field number. (They cannot share the encoder file: the background
   package compiles with `rootDir: "src"`.)
+
+`npm run test:fee` needs a running pokerchaind with a **non-zero**
+`--minimum-gas-prices` and a funded key; see the header of
+`tests/chain-fee.e2e.mjs`. It is the only test that proves the client's fee is
+accepted rather than merely well-formed.
 
 `npm run test:e2e` needs `google-chrome` on `PATH` (or `CHROME_PATH`) and
 borrows `puppeteer-core` from the keplr-wallet workspace rather than adding a
