@@ -97,10 +97,19 @@ dependency here.
 1. Run a node and a relay (see `docs/relay/deployment.md` and
    `pokerchain/readme.md`). The node's LCD must send CORS headers, because the
    page queries and broadcasts from the browser.
-2. Export a funded testnet key:
-   `pokerchaind keys export <name> > player.key`
-3. `npm run dev`, load the page, acknowledge the risk gate, import
-   `player.key`, then create or join a game from the lobby.
+2. `npm run dev`, load the page, acknowledge the risk gate, and get an account
+   in one of three ways:
+   - **Create account** — generates a 24-word mnemonic in the page (cosmos
+     path `m/44'/118'/0'/0/0`, so the same words work in every other client).
+     Fund the address it shows: `pokerchaind tx bank send <funded> <address>`.
+   - **Recover** — paste an existing mnemonic.
+   - **Key file** — `pokerchaind keys export <name> > player.key`, then upload.
+3. Create or join a game from the lobby.
+
+`src/wallet/mnemonic.spec.ts` pins the derivation against the same golden
+vector as `bitpoker/test/wallet/hd_wallet_test.cpp`, so an account made in the
+browser is the account `pokerchaind keys add --recover` reproduces — not a
+browser-only one.
 
 ## Configure a deployment
 

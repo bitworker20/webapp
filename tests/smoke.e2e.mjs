@@ -110,7 +110,53 @@ async function main() {
     await page.click('[data-testid="risk-ack"]');
     await page.click('[data-testid="risk-continue"]');
 
-    // 2. Import the key file.
+    // 2. Create-account tab: generating must produce 24 words and an address,
+    //    and must not let the player past until they say they wrote them down.
+    //    Checked before the import path because it is now the default landing
+    //    tab — a browser visitor has no node to export a key from.
+    await page.waitForSelector('[data-testid="create-generate"]');
+    await page.click('[data-testid="create-generate"]');
+    await page.waitForSelector('[data-testid="create-mnemonic"]');
+    const words = await page.$eval(
+      '[data-testid="create-mnemonic"]',
+      (el) => el.querySelectorAll("li").length
+    );
+    if (words !== 24) {
+      fail(`generated mnemonic had ${words} words, expected 24`);
+    }
+    const generatedAddress = await page.$eval(
+      '[data-testid="create-address"]',
+      (el) => el.textContent
+    );
+    if (!generatedAddress.startsWith("xpoker1")) {
+      fail(`generated account address looks wrong: ${generatedAddress}`);
+    }
+    if (!(await page.$eval('[data-testid="create-use"]', (b) => b.disabled))) {
+      fail("the create flow let the player through without acknowledging the words");
+    }
+
+    // 3. Recover tab: the same words must derive the same address, which is
+    //    what makes a generated account recoverable anywhere else.
+    const generatedWords = await page.$eval(
+      '[data-testid="create-mnemonic"]',
+      (el) => [...el.querySelectorAll("li")].map((li) => li.textContent).join(" ")
+    );
+    await page.click('[data-testid="tab-recover"]');
+    await page.type('[data-testid="recover-mnemonic"]', generatedWords);
+    await page.waitForSelector('[data-testid="recover-address"]');
+    const recoveredAddress = await page.$eval(
+      '[data-testid="recover-address"]',
+      (el) => el.textContent
+    );
+    if (recoveredAddress !== generatedAddress) {
+      fail(
+        `recovering the generated words gave a different account: ` +
+          `${recoveredAddress} != ${generatedAddress}`
+      );
+    }
+
+    // 4. Import the key file.
+    await page.click('[data-testid="tab-file"]');
     await page.waitForSelector('[data-testid="key-file"]');
     const input = await page.$('[data-testid="key-file"]');
     await input.uploadFile(keyFile);
@@ -127,7 +173,7 @@ async function main() {
     );
     await page.click('[data-testid="key-import"]');
 
-    // 3. The banner proves the key decrypted to the expected account.
+    // 5. The banner proves the key decrypted to the expected account.
     try {
       await page.waitForSelector('[data-testid="testnet-banner"]', {
         timeout: 30000,
@@ -154,7 +200,7 @@ async function main() {
       fail("the testnet warning is missing from the banner");
     }
 
-    // 4. gamecore selfTest in the worker — the deployment check.
+    // 6. gamecore selfTest in the worker — the deployment check.
     await page.waitForSelector('[data-testid="selftest"]');
     await page.$eval("details", (d) => d.setAttribute("open", "open"));
     await page.evaluate(() => {
