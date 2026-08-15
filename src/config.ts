@@ -1,9 +1,14 @@
 // Deployment configuration for the web client.
 //
-// Endpoints are defaults, not locks: the page lets the player point at another
-// node or relay, which is what makes this client useful against a local dev
-// chain as well as a shared testnet. Override at build time with Vite env vars
-// (VITE_*) when deploying.
+// These are the publisher's choice, not the player's: the deployed page does
+// not offer an endpoint field, because a node the player was talked into
+// pasting can lie about balances, session state and relay assignments. Point a
+// build somewhere else with the Vite env vars below — for local development
+// that means a `.env.local`, not typing into the page.
+//
+// (The same page rendered by the Keplr extension does show the field: it is
+// passed no defaults, so that is the only way its endpoint gets set. See
+// PokerPageProps.endpointsFixed.)
 export const CHAIN_ID = import.meta.env["VITE_CHAIN_ID"] ?? "pokerchain-testnet-1";
 export const BECH32_PREFIX = import.meta.env["VITE_BECH32_PREFIX"] ?? "xpoker";
 export const DEFAULT_LCD_URL =

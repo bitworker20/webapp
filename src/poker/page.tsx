@@ -60,6 +60,16 @@ export interface PokerPageProps {
   // need it too (the web client's bridge broadcasts through it). Without this
   // the host's copy would silently go stale after the user edits the field.
   onLcdUrlChange?: (lcdUrl: string) => void;
+  // Hides the lcd url field. For a deployed web client the endpoint is the
+  // publisher's choice (VITE_LCD_URL), not a player setting, and showing it
+  // invites "paste this URL to fix your connection" — a node that lies about
+  // balances, session state and relay assignments.
+  //
+  // Off by default because the extension needs it: it passes no defaults, so
+  // that field is the only way its endpoint gets set. This is a UX control,
+  // not a security boundary — anything running on the origin can repoint the
+  // client regardless (see docs/webapp-threat-model.md).
+  endpointsFixed?: boolean;
 }
 
 export const PokerPage: React.FC<PokerPageProps> = ({
@@ -68,6 +78,7 @@ export const PokerPage: React.FC<PokerPageProps> = ({
   defaults,
   banner,
   onLcdUrlChange,
+  endpointsFixed = false,
 }) => {
   const [snapshot, setSnapshot] = useState<GameSnapshot>({
     stage: "idle",
@@ -239,7 +250,7 @@ export const PokerPage: React.FC<PokerPageProps> = ({
 
       <div style={styles.block}>
         <b>Play on-chain (pokerchain)</b>
-        {field("lcdUrl", "lcd url", "22rem")}
+        {!endpointsFixed && field("lcdUrl", "lcd url", "22rem")}
         <div>
           <span style={styles.label}>account</span>
           {account.address ? (

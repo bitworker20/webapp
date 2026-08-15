@@ -109,12 +109,7 @@ export const App: React.FC = () => {
 
   if (!address) {
     return (
-      <KeyImport
-        keyHolder={keyHolder}
-        lcdUrl={lcdUrl}
-        onLcdUrl={setLcdUrl}
-        onLoaded={setAddress}
-      />
+      <KeyImport keyHolder={keyHolder} onLoaded={setAddress} />
     );
   }
 
@@ -133,6 +128,7 @@ export const App: React.FC = () => {
           playerName: "WebPlayer",
         }}
         onLcdUrlChange={setLcdUrl}
+        endpointsFixed
         banner={
           <TestnetBanner
             address={address}
@@ -168,10 +164,8 @@ const TABS: ReadonlyArray<{ id: EntryTab; label: string }> = [
 // everyone who did not already have the chain installed.
 const KeyImport: React.FC<{
   keyHolder: KeyHolder;
-  lcdUrl: string;
-  onLcdUrl: (url: string) => void;
   onLoaded: (address: string) => void;
-}> = ({ keyHolder, lcdUrl, onLcdUrl, onLoaded }) => {
+}> = ({ keyHolder, onLoaded }) => {
   const [tab, setTab] = useState<EntryTab>("create");
 
   return (
@@ -206,16 +200,6 @@ const KeyImport: React.FC<{
         {tab === "file" && (
           <KeyFileImport keyHolder={keyHolder} onLoaded={onLoaded} />
         )}
-
-        <label style={styles.field}>
-          Node REST (LCD) endpoint
-          <input
-            type="text"
-            value={lcdUrl}
-            onChange={(e) => onLcdUrl(e.target.value)}
-            style={styles.input}
-          />
-        </label>
       </div>
     </div>
   );
