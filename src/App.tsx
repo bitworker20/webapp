@@ -6,8 +6,8 @@
 // @bitpoker/poker-core).
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { PokerPage } from "./poker/page";
-import { fetchUchipBalance } from "./poker/lobby";
-import { formatChip, uchipLessThan } from "./poker/chip";
+import { fetchUchipBalance } from "@bitpoker/poker-session/lobby";
+import { formatChip, uchipLessThan } from "@bitpoker/poker-session/chip";
 import { decryptArmoredPrivKey } from "./wallet/armor";
 import { KeyHolder, deriveIdentity } from "./wallet/key-holder";
 import {

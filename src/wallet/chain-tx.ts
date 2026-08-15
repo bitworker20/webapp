@@ -11,7 +11,7 @@
 // the Keplr fork, which does the same job for the extension. The two cannot
 // share a file — that package compiles with `rootDir: "src"`, so it cannot
 // include sources from outside itself — so they are pinned together instead by
-// the golden vectors in ../poker/chain-tx-vectors.json, which both test suites
+// the golden vectors in @bitpoker/poker-session/fixtures, which both test suites
 // assert against. If you change a field number here, that fixture must change
 // too and the extension's spec will fail until its encoder matches.
 //

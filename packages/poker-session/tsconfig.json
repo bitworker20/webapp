@@ -1,0 +1,27 @@
+{
+  // NOTE ON THE TYPESCRIPT VERSION (package.json pins ~5.6.3 deliberately):
+  // these sources are compiled by three toolchains — this package's own
+  // typecheck, the web client's Vite build, and the Keplr extension's
+  // TypeScript 5.0, which compiles the vendored copy (see
+  // tools/sync-poker-session.sh). TypeScript 5.7 made Uint8Array generic
+  // (Uint8Array<ArrayBufferLike>), which the crypto code here does not satisfy
+  // under 5.0's rules. Staying on 5.6 keeps one source dialect for all three;
+  // bump only when the extension's TypeScript moves too.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["vitest/globals", "node"]
+  },
+  "include": ["src", "scripts"]
+}

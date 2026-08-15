@@ -1,3 +1,8 @@
+// @bitpoker/poker-session — the headless session layer (relay transport,
+// gamecore worker, hand state machine) — needs no configuration here: it is an
+// npm workspace under packages/, so it resolves through node_modules like any
+// other dependency. This client only renders it; nothing under src/
+// reimplements a protocol.
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 

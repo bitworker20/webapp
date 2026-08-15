@@ -1,5 +1,5 @@
 // TypeScript client for the BitPoker relay wire protocol (poker-relayd) — the
-// extension port of bitpoker/wasm/host/relay_client.js: the 11-byte big-endian
+// browser port of bitpoker/wasm/host/relay_client.js: the 11-byte big-endian
 // frame header, the protobuf ClientHello, and an awaitable inbound frame queue
 // over a standard WebSocket. Zero dependencies.
 //

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { GameSnapshot } from "../controller";
-import { TableState } from "../types";
+import { GameSnapshot } from "@bitpoker/poker-session/controller";
+import { TableState } from "@bitpoker/poker-session/types";
 
 // Shared table chrome: the felt surface, seat plates, the auto-hiding hand
 // result banner and the persistent session-over strip. Kept style-only — all

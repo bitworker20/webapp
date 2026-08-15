@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { PokerGame } from "../controller";
-import { chipToUchip, formatChip, uchipLessThan } from "../chip";
+import { PokerGame } from "@bitpoker/poker-session/controller";
+import {
+  chipToUchip,
+  formatChip,
+  uchipLessThan,
+} from "@bitpoker/poker-session/chip";
 import { styles } from "./styles";
 
 export interface CreateGameSubmit {

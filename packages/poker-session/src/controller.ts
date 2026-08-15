@@ -1,7 +1,8 @@
-// Orchestrates one hand of BitPoker from the extension page: relay transport
-// (relay-client), gamecore in the worker (worker-client), and the wait-state
-// machine in between. The UI subscribes to snapshots and calls act() when the
-// gamecore reports it is the local player's turn (wait === 0).
+// Orchestrates one hand of BitPoker for whichever client renders it: relay
+// transport (relay-client), gamecore in the worker (worker-client), and the
+// wait-state machine in between. The UI subscribes to snapshots and calls
+// act() when the gamecore reports it is the local player's turn (wait === 0).
+// Nothing below this line knows what that UI looks like.
 //
 // Mirrors the flow proven by bitpoker/wasm/test/run_interop_peer.js, so this
 // controller is wire-compatible with a native GameSession peer over

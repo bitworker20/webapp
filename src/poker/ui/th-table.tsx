@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { GameSnapshot } from "../controller";
+import { GameSnapshot } from "@bitpoker/poker-session/controller";
 import {
   PHASE_NAMES,
   PokerActionKind,
   TablePlayer,
   TableState,
-} from "../types";
-import { BetView, betActionCost, computeBetBounds } from "../bet-bounds";
+} from "@bitpoker/poker-session/types";
+import {
+  BetView,
+  betActionCost,
+  computeBetBounds,
+} from "@bitpoker/poker-session/bet-bounds";
 import { Cards, CardBacks } from "./cards";
 import { styles } from "./styles";
 import {

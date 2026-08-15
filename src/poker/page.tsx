@@ -23,14 +23,14 @@ import {
   PokerGameController,
   JoinOptions,
   PokerGame,
-} from "./controller";
-import { PokerWalletBridge } from "./wallet-bridge";
+} from "@bitpoker/poker-session/controller";
+import { PokerWalletBridge } from "@bitpoker/poker-session/wallet-bridge";
 import {
   ChainGameIntent,
   fetchUchipBalance,
   localGameName,
-} from "./lobby";
-import { formatChip } from "./chip";
+} from "@bitpoker/poker-session/lobby";
+import { formatChip } from "@bitpoker/poker-session/chip";
 import { styles } from "./ui/styles";
 import { ThTable } from "./ui/th-table";
 import { ZjhTable } from "./ui/zjh-table";

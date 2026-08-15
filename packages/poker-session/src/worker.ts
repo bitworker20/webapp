@@ -1,8 +1,9 @@
 // BitPoker gamecore Web Worker: hosts the emscripten wasm module off the main
 // thread (hand crypto blocks for seconds) and exposes it over a tiny id-based
 // RPC. This file must stay dependency-free — it is bundled as a single
-// self-contained classic worker script (see webpack servicePackages) and loads
-// the vendored gamecore.js via importScripts from the extension build root.
+// self-contained classic worker script (esbuild here via scripts/stage.mjs, a
+// dedicated webpack entry in the extension) and loads gamecore.js via
+// importScripts from whatever root its host staged it at.
 
 declare function importScripts(...urls: string[]): void;
 

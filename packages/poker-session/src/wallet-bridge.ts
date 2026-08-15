@@ -1,16 +1,17 @@
 // The only seam between the poker session logic and whatever holds the
 // account key.
 //
-// Everything else under poker/ is transport, game state and rendering — it
-// never touches a key, a signature or a chain transaction directly, it asks a
+// Everything else in this package is transport and game state — it never
+// touches a key, a signature or a chain transaction directly, it asks a
 // bridge. Two implementations exist:
 //
-//   - ExtensionWalletBridge (src/wallet-bridge-extension.ts) talks to the
-//     Keplr background service over the router, so the key stays in the
-//     background realm and the raw signer keeps its domain-prefix allowlist.
-//   - BrowserKeyBridge (bitpoker webapp) holds the key in page memory. That is
-//     strictly weaker and is why the web client is testnet-only; see the
-//     webapp's threat-model doc.
+//   - ExtensionWalletBridge (keplr-wallet/apps/extension/src/wallet-bridge-extension.ts)
+//     talks to the Keplr background service over the router, so the key stays
+//     in the background realm and the raw signer keeps its domain-prefix
+//     allowlist.
+//   - BrowserKeyBridge (webapp/src/wallet/) holds the key in page memory. That
+//     is strictly weaker and is why the web client is testnet-only; see
+//     docs/webapp-threat-model.md.
 //
 // Keep this interface semantic, not raw: callers ask for "open an intent" or
 // "submit this result", never "sign these bytes for me" (signPayload is the

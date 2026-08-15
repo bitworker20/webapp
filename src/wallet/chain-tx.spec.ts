@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import vectors from "../poker/chain-tx-vectors.json";
+import vectors from "@bitpoker/poker-session/fixtures/chain-tx-vectors.json";
 import {
   encodeAuthInfo,
   encodeMsgOpenGameIntent,

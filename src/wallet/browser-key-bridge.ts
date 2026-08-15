@@ -21,7 +21,7 @@ import {
   SubmitEvidenceArgs,
   SubmitResultArgs,
   SubmitSecretArgs,
-} from "../poker/wallet-bridge";
+} from "@bitpoker/poker-session/wallet-bridge";
 import { KeyHolder, toHex } from "./key-holder";
 import {
   encodeAuthInfo,

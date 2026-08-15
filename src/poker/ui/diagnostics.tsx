@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { PokerGameController } from "../controller";
-import { PokerWalletBridge } from "../wallet-bridge";
+import { PokerGameController } from "@bitpoker/poker-session/controller";
+import { PokerWalletBridge } from "@bitpoker/poker-session/wallet-bridge";
 import { styles } from "./styles";
 
 // Dev/e2e diagnostics: gamecore self-test in the worker and a raw sign

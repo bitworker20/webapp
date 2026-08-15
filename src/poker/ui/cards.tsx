@@ -1,5 +1,5 @@
 import React from "react";
-import { TableCard } from "../types";
+import { TableCard } from "@bitpoker/poker-session/types";
 
 // Printed card artwork, vendored from the mylibs repo under
 // vendor/bitpoker/cards/ (see the README there). A backend card name is the

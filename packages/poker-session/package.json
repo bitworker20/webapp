@@ -1,0 +1,26 @@
+{
+  "name": "@bitpoker/poker-session",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless BitPoker session SDK: relay transport, gamecore worker and the hand state machine. No UI, no bundler-specific syntax — every client renders it its own way.",
+  "exports": {
+    "./fixtures/*": "./fixtures/*",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "stage": "node scripts/stage.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.8.1",
+    "@noble/hashes": "^1.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "esbuild": "^0.25.12",
+    "typescript": "~5.6.3",
+    "vitest": "^3.0.5"
+  }
+}

@@ -3,16 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "description": "BitPoker web client — testnet / small-stakes only. Holds the account key in page memory; see docs/webapp-threat-model.md.",
   "scripts": {
-    "build:worker": "node scripts/build-worker.mjs",
-    "dev": "npm run build:worker && vite",
-    "build": "npm run build:worker && tsc --noEmit && vite build",
+    "stage": "node packages/poker-session/scripts/stage.mjs public",
+    "dev": "npm run stage && vite",
+    "build": "npm run stage && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && npm test --workspace @bitpoker/poker-session",
     "test:e2e": "node tests/smoke.e2e.mjs"
   },
   "dependencies": {
+    "@bitpoker/poker-session": "*",
     "@noble/ciphers": "^1.2.1",
     "@noble/curves": "^1.8.1",
     "@noble/hashes": "^1.7.1",

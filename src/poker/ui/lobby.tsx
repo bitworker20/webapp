@@ -4,8 +4,8 @@ import {
   fetchOpenIntents,
   joinableIntents,
   localGameName,
-} from "../lobby";
-import { formatChip, shortAddress } from "../chip";
+} from "@bitpoker/poker-session/lobby";
+import { formatChip, shortAddress } from "@bitpoker/poker-session/chip";
 import { styles } from "./styles";
 
 // On-chain lobby: the open intents another player can join with one click.
