@@ -21,11 +21,14 @@ import {
   uchipToChip,
 } from "@bitpoker/poker-session/chip";
 import { PokerSession } from "../poker/session";
+import { BrowserKeyBridge } from "../wallet/browser-key-bridge";
+import { RecoveryCard } from "./recovery-card";
 import { BECH32_PREFIX, CHAIN_ID, DEFAULT_LCD_URL } from "../config";
 import { IconCards, IconPlus, IconRefresh } from "./icons";
 
 interface Props {
   session: PokerSession;
+  wallet: BrowserKeyBridge;
   address: string;
   playerName: string;
   balanceUchip: string;
@@ -34,6 +37,7 @@ interface Props {
 
 export const PlayView: React.FC<Props> = ({
   session,
+  wallet,
   address,
   playerName,
   balanceUchip,
@@ -77,7 +81,11 @@ export const PlayView: React.FC<Props> = ({
   );
 
   return (
-    <div className="page grid grid-2">
+    <div className="page col" style={{ gap: 16 }}>
+      {/* Money first: an escrow the player cannot see how to recover is worse
+          than an empty lobby. */}
+      <RecoveryCard wallet={wallet} address={address} />
+      <div className="grid grid-2">
       <Lobby
         myAddress={address}
         enabled={!session.busy && !!address}
@@ -88,6 +96,7 @@ export const PlayView: React.FC<Props> = ({
         balanceUchip={balanceUchip}
         onSubmit={createGame}
       />
+      </div>
     </div>
   );
 };

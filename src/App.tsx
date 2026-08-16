@@ -217,6 +217,7 @@ const SignedIn: React.FC<{
         ) : view === "play" ? (
           <PlayView
             session={session}
+            wallet={wallet}
             address={address}
             playerName={playerName}
             balanceUchip={balanceUchip}

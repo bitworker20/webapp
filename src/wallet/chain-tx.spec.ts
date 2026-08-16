@@ -3,6 +3,7 @@ import vectors from "@bitpoker/poker-session/fixtures/chain-tx-vectors.json";
 import {
   encodeAuthInfo,
   encodeMsgCancelGameIntent,
+  encodeMsgClaimSessionTimeout,
   encodeMsgOpenGameIntent,
   encodeMsgSubmitSessionEvidence,
   encodeMsgSubmitSessionResult,
@@ -38,6 +39,11 @@ describe("pokerchain message encoding matches the extension's encoder", () => {
   it("encodes MsgCancelGameIntent", () => {
     const v = vectors.cancelGameIntent;
     expect(hex(encodeMsgCancelGameIntent(v.input))).toBe(v.hex);
+  });
+
+  it("encodes MsgClaimSessionTimeout", () => {
+    const v = vectors.claimSessionTimeout;
+    expect(hex(encodeMsgClaimSessionTimeout(v.input))).toBe(v.hex);
   });
 
   it("encodes MsgSubmitSessionResult", () => {

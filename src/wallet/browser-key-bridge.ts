@@ -35,6 +35,7 @@ import { KeyHolder, toHex } from "./key-holder";
 import {
   encodeAuthInfo,
   encodeMsgCancelGameIntent,
+  encodeMsgClaimSessionTimeout,
   encodeMsgOpenGameIntent,
   encodeMsgSend,
   encodeMsgSubmitSessionEvidence,
@@ -44,6 +45,7 @@ import {
   encodeTxBody,
   encodeTxRaw,
   MSG_CANCEL_GAME_INTENT_TYPE_URL,
+  MSG_CLAIM_SESSION_TIMEOUT_TYPE_URL,
   MSG_OPEN_GAME_INTENT_TYPE_URL,
   MSG_SEND_TYPE_URL,
   MSG_SUBMIT_SESSION_EVIDENCE_TYPE_URL,
@@ -214,6 +216,22 @@ export class BrowserKeyBridge implements PokerWalletBridge {
       chainId,
       MSG_CANCEL_GAME_INTENT_TYPE_URL,
       encodeMsgCancelGameIntent({ creator: bech32Address, intentId }),
+      GAS_FLOOR_GAME
+    );
+  }
+
+  // What the chain does with this depends on the session: refund an abandoned
+  // one, or send an unconfirmed result to adjudication. Either way it is the
+  // player recovering their own escrow, so no approval prompt.
+  async claimSessionTimeout(
+    chainId: string,
+    sessionId: string
+  ): Promise<PokerTxResult> {
+    const { bech32Address } = await this.getKey(chainId);
+    return this.broadcast(
+      chainId,
+      MSG_CLAIM_SESSION_TIMEOUT_TYPE_URL,
+      encodeMsgClaimSessionTimeout({ creator: bech32Address, sessionId }),
       GAS_FLOOR_GAME
     );
   }
