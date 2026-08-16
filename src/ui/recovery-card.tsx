@@ -47,7 +47,9 @@ export const RecoveryCard: React.FC<{
       try {
         const result = await wallet.claimSessionTimeout(CHAIN_ID, sessionId);
         if (result.code !== 0) {
-          setError(result.rawLog || `the chain refused it (code ${result.code})`);
+          setError(
+            result.rawLog || `the chain refused it (code ${result.code})`
+          );
         }
         // The refund shows up in the balance the app polls anyway.
       } catch (e) {
@@ -120,7 +122,7 @@ export const RecoveryCard: React.FC<{
               >
                 {busyId === session.session_id ? (
                   <span className="spinner" />
-                ) : recovery.kind === "escalate" ? (
+                ) : recovery.action === "escalate" ? (
                   "Send to adjudication"
                 ) : (
                   "Refund"
