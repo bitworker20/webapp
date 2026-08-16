@@ -24,7 +24,14 @@ src/
   worker-client.ts  promise API over the gamecore worker
   worker.ts         the worker itself (importScripts("gamecore.js"))
   wallet-bridge.ts  PokerWalletBridge — the seam every host implements
-  lobby.ts          chain queries: open intents, balances
+  lobby.ts          chain queries: open intents, balances, block height
+  recovery.ts       what can still be done about a session that stopped
+                    moving: refund it, escalate it, reveal a secret, ask for
+                    a verdict
+  session-vault.ts  the per-hand session identity, kept in localStorage so a
+                    reload can still reveal it (see below)
+  fees.ts           the node's gas price + simulate, so no client hard-codes
+                    a fee
   bet-bounds.ts     legal bet/raise range for TH and ZJH
   chip.ts types.ts  uchip↔CHIP formatting, snapshot types
 fixtures/
@@ -37,6 +44,18 @@ assets/
 `wallet-bridge.ts` is the whole host seam: the extension implements it against
 its background service (key in a separate realm), the web client against a key
 in page memory (testnet only — `docs/webapp-threat-model.md`).
+
+### The one thing this package writes to disk
+
+`session-vault.ts` stores the **per-hand session identity** (a FiatShamir
+scalar, not the account key) in `localStorage` when an intent is opened, and
+deletes it once it is spent. It exists because adjudication decrypts each
+seat's cards from the secret that seat disclosed on chain and scores a seat
+that disclosed none as forfeiting the whole escrow — and the hands that end up
+disputed are exactly the ones where the tab, and the gamecore heap holding
+that secret, are gone. Both hosts inherit this: the extension page has its own
+`localStorage`, and the hand secret was already page-side there (the gamecore
+runs in the page), so it adds no exposure the game did not already have.
 
 ## Two rules that must not be broken
 
@@ -72,7 +91,7 @@ with emscripten from this repo:
 ```sh
 source /path/to/emsdk/emsdk_env.sh
 bitpoker/wasm/build_and_test.sh
-cp bitpoker/wasm/build-wasm/gamecore.{js,wasm} js/poker-session/assets/
+cp bitpoker/wasm/build-wasm/gamecore.{js,wasm} webapp/packages/poker-session/assets/
 ```
 
 Loaded as a classic script + wasm fetch — no bundler ever parses the emscripten
@@ -109,6 +128,7 @@ notice as a comment, and the attribution must stay rendered in the shipped app
 ## Tests
 
 ```sh
-npm install && npm test        # vitest: bet bounds, chip math, endpoint blob, lobby
+npm install && npm test        # vitest: bet bounds, chip math, endpoint blob,
+                               # lobby, fees, recovery, session vault
 npm run typecheck
 ```

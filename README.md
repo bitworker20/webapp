@@ -29,6 +29,15 @@ deployment fixed, the key, diagnostics). A live session takes over the Play
 screen; the wallet stays reachable mid-hand and the nav shows the table is
 live.
 
+Play also carries **Unfinished games** (`src/ui/recovery-card.tsx`): every
+matched session escrows both stakes, and when one stops moving only the two
+players can unwind it. The card says which of the four things the chain will
+let this account do — refund an abandoned session, escalate a result the
+opponent never confirmed, reveal this seat's cards, or ask for a verdict — and
+labels the button with the outcome, not with the message name. The order
+matters for money: a seat that never discloses its secret is scored as having
+forfeited the whole escrow, so "reveal" always comes before "verdict".
+
 `packages/poker-session/` holds everything that is *not* a matter of taste:
 relay transport, the gamecore wasm worker, the hand state machine, bet bounds,
 chain queries. The Keplr extension page runs the same code from a **vendored
@@ -47,6 +56,11 @@ alike. Consequences worth knowing:
 The seam between the hosts is `packages/poker-session/src/wallet-bridge.ts`.
 The extension passes a bridge that talks to its background service; this client
 passes `BrowserKeyBridge`, which signs in the page.
+
+The package also owns the only value either client persists — the per-hand
+session identity, in `session-vault.ts`, without which a reload could not
+reveal and would forfeit a disputed hand. It is not the account key; see the
+threat model.
 
 ## Where this directory lives
 
