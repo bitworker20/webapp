@@ -84,6 +84,37 @@ with it.) Two things do *not* work in a bare clone:
 - **`docs/webapp-threat-model.md`** and **`docs/webapp/deployment.md`**, linked
   from here, live in the monorepo.
 
+### Why a mirror and not a submodule
+
+The question comes up because everything *else* alongside this directory —
+`pokerchain`, `keplr-wallet`, `explorer`, `website` — is a submodule. The
+difference is what this directory shares with the rest of the repo, and how
+often.
+
+Measured over the commits since 2026-05: **18 commits touched `webapp/`, and 10
+of them touched `packages/poker-session/`**, with **7 matching commits on the
+keplr side** carrying the vendored copy. So roughly every second change here is
+a change to *both* browser clients, and it lands today as two commits (one in
+the monorepo, which also moves the keplr pointer; one in the keplr submodule).
+
+As a submodule that becomes four commits across three repositories — a webapp
+commit, a keplr commit for the vendored copy, and two pointer bumps — and, more
+importantly, master gains a state it cannot have today: a webapp pointer and a
+keplr pointer whose session layers disagree. CI's drift gate
+(`tools/sync-poker-session.sh --check`) would go red, but only after the fact;
+in-tree, that state is unrepresentable.
+
+Meanwhile the things a submodule is usually wanted for are already covered: the
+mirror gives a deployment host a ~6MB clone that builds on its own, and the
+mirror repo can carry its own tags for releases.
+
+**What would flip the answer**: publishing `@bitpoker/poker-session` as a
+versioned npm package that both clients depend on. That removes the vendoring,
+and with it the reason the two have to move together — at which point splitting
+this directory out costs almost nothing. Outside contributors wanting PRs
+against a real repo would be a second reason, but it needs the versioning
+solved first, or the coupling just moves from a directory to a pointer.
+
 `packages/poker-session/assets/gamecore.{js,wasm}` are checked-in build outputs
 of the monorepo's `bitpoker/wasm` target — see that package's
 [README](packages/poker-session/README.md) for how to refresh them. They can
