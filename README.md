@@ -182,10 +182,18 @@ browser-only one.
 ## Configure a deployment
 
 Build-time `VITE_*` variables (see `src/config.ts`): `VITE_CHAIN_ID`,
-`VITE_BECH32_PREFIX`, `VITE_LCD_URL`, `VITE_RELAY_URL`. The endpoints are the
-publisher's choice, not the player's — Settings shows them read-only, because
-a node someone was talked into pasting can lie about balances, session state
-and relay assignments.
+`VITE_BECH32_PREFIX`, `VITE_LCD_URL`, `VITE_RELAY_URL`, `VITE_FAUCET_URL`. The
+endpoints are the publisher's choice, not the player's — Settings shows them
+read-only, because a node someone was talked into pasting can lie about
+balances, session state and relay assignments.
+
+`VITE_FAUCET_URL` points at `poker-faucetd`, and is the one that may be left
+unset: the wallet page then tells the player where chips come from instead of
+showing a claim button. When it is set, the page's origin has to appear in the
+daemon's `allowed-origins` or the browser will drop the answer and the wallet
+will conclude there is no faucet. The faucet is invitation-only, and this
+client has no gate of its own, so its claim form asks for the code each time
+rather than storing one — see [`docs/faucet/README.md`](../docs/faucet/README.md).
 
 Serve from a **dedicated origin** with a strict CSP that includes
 `'wasm-unsafe-eval'`, over HTTPS (so relays must be `wss://`). The threat-model

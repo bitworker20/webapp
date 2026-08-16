@@ -11,6 +11,7 @@ import {
   mnemonicToPrivKey,
   validateMnemonic,
 } from "../wallet/mnemonic";
+import { faucetConfigured } from "../wallet/faucet";
 import { BECH32_PREFIX, DESKTOP_CLIENT_NOTE } from "../config";
 import { IconAlert } from "./icons";
 
@@ -117,10 +118,11 @@ export const AccountEntry: React.FC<{
   );
 };
 
-// A new account is empty and there is no faucet, so say so here rather than
-// let the player discover it at the lobby when every stake is unaffordable.
-const FUNDING_NOTE =
-  "A new account starts with no CHIP. Ask whoever runs this testnet to send some to the address above before you sit down.";
+// A new account is empty, so say where chips come from here rather than let
+// the player discover it at the lobby when every stake is unaffordable.
+const FUNDING_NOTE = faucetConfigured()
+  ? "A new account starts with no CHIP. The wallet page has a faucet — have the invitation code you were sent ready."
+  : "A new account starts with no CHIP. Ask whoever runs this testnet to send some to the address above before you sit down.";
 
 const CreateAccount: React.FC<{
   keyHolder: KeyHolder;

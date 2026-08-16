@@ -13,6 +13,14 @@ import {
 } from "@bitpoker/poker-session/chip";
 import { Coin } from "@bitpoker/poker-session/fees";
 import { BrowserKeyBridge } from "../wallet/browser-key-bridge";
+import {
+  claimFromFaucet,
+  describeWait,
+  FaucetError,
+  FaucetInfo,
+  FaucetPayout,
+  fetchFaucetInfo,
+} from "../wallet/faucet";
 import { BECH32_PREFIX, CHAIN_ID } from "../config";
 import { CopyButton } from "./shell";
 import { IconReceive, IconSend } from "./icons";
@@ -37,15 +45,20 @@ export const WalletView: React.FC<Props> = ({
   onSent,
 }) => (
   <div className="page grid grid-2">
-    <BalanceCard address={address} balanceUchip={balanceUchip} />
+    <BalanceCard
+      address={address}
+      balanceUchip={balanceUchip}
+      onFunded={onSent}
+    />
     <SendCard wallet={wallet} balanceUchip={balanceUchip} onSent={onSent} />
   </div>
 );
 
-const BalanceCard: React.FC<{ address: string; balanceUchip: string }> = ({
-  address,
-  balanceUchip,
-}) => (
+const BalanceCard: React.FC<{
+  address: string;
+  balanceUchip: string;
+  onFunded: () => void;
+}> = ({ address, balanceUchip, onFunded }) => (
   <section className="card card-pad">
     <div className="stat">
       <span className="k">Balance</span>
@@ -77,12 +90,135 @@ const BalanceCard: React.FC<{ address: string; balanceUchip: string }> = ({
     <div className="row" style={{ marginTop: 12 }}>
       <CopyButton value={address} label="Copy address" />
     </div>
-    <p className="faint tiny" style={{ marginBottom: 0 }}>
-      Send testnet CHIP here from another client or{" "}
-      <code>pokerchaind tx bank send</code>. There is no faucet.
-    </p>
+
+    <FaucetPanel address={address} onFunded={onFunded} />
   </section>
 );
+
+// The faucet, when this deployment has one.
+//
+// It is invitation-only on the public testnet, and the invitation lives on the
+// project site rather than here — this page has no gate of its own — so the
+// code is typed in rather than remembered. Nothing is stored: a claim is a
+// once-a-day thing, and an invitation code sitting in localStorage is one more
+// secret this page would be holding for no good reason.
+const FaucetPanel: React.FC<{ address: string; onFunded: () => void }> = ({
+  address,
+  onFunded,
+}) => {
+  const [info, setInfo] = useState<FaucetInfo>();
+  const [asked, setAsked] = useState(false);
+  const [code, setCode] = useState("");
+  const [state, setState] = useState<FaucetState>({ phase: "idle" });
+
+  useEffect(() => {
+    let alive = true;
+    void fetchFaucetInfo().then((answer) => {
+      if (alive) {
+        setInfo(answer);
+        setAsked(true);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const onClaim = useCallback(async () => {
+    setState({ phase: "claiming" });
+    try {
+      const payout = await claimFromFaucet({
+        address,
+        code: code.trim() || undefined,
+      });
+      setState({ phase: "paid", payout });
+      onFunded();
+    } catch (e) {
+      const message =
+        e instanceof FaucetError
+          ? e.retryAfterSeconds > 0
+            ? `${e.message} Try again in ${describeWait(e.retryAfterSeconds)}.`
+            : e.message
+          : "The faucet could not be reached.";
+      setState({ phase: "refused", message });
+    }
+  }, [address, code, onFunded]);
+
+  // Before the answer comes back, and on a build with no faucet, the page says
+  // the same thing it always said: chips come from somewhere else.
+  if (!asked || !info) {
+    return (
+      <p className="faint tiny" style={{ marginBottom: 0 }}>
+        Send testnet CHIP here from another client or{" "}
+        <code>pokerchaind tx bank send</code>.
+      </p>
+    );
+  }
+
+  const claiming = state.phase === "claiming";
+  return (
+    <div style={{ marginTop: 4 }} data-testid="faucet">
+      <div className="divider" style={{ margin: "14px 0" }} />
+      <span className="k">Faucet</span>
+      <p className="faint tiny">
+        {info.paused
+          ? "The faucet is between top-ups — try again a little later."
+          : `${formatChip(info.grantUchip)} of testnet chips per claim, once every ${describeWait(
+              info.addressCooldownSeconds,
+            )} per address.`}
+      </p>
+
+      {info.inviteRequired && (
+        <label className="field">
+          <span className="label">Invitation code</span>
+          <input
+            className="input mono"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="XXXX-XXXX-XXXX"
+            spellCheck={false}
+            autoComplete="off"
+            data-testid="faucet-code"
+          />
+        </label>
+      )}
+
+      {state.phase === "refused" && (
+        <div className="notice notice-bad" data-testid="faucet-error">
+          {state.message}
+        </div>
+      )}
+      {state.phase === "paid" && (
+        <div className="notice" data-testid="faucet-ok">
+          <span className="ok">
+            {state.payout.dryRun
+              ? "Approved — this faucet sends nothing (dry run)."
+              : `${formatChip(state.payout.amountUchip)} on the way.`}
+          </span>{" "}
+          {state.payout.txHash && (
+            <code className="mono tiny">{state.payout.txHash}</code>
+          )}
+        </div>
+      )}
+
+      <button
+        className="btn"
+        disabled={info.paused || claiming}
+        onClick={() => void onClaim()}
+        data-testid="faucet-claim"
+      >
+        {claiming ? <span className="spinner" /> : <IconReceive size={12} />}
+        {claiming ? "Asking…" : `Get ${formatChip(info.grantUchip)}`}
+      </button>
+    </div>
+  );
+};
+
+type FaucetState =
+  | { phase: "idle" }
+  | { phase: "claiming" }
+  | { phase: "paid"; payout: FaucetPayout }
+  | { phase: "refused"; message: string };
 
 const SendCard: React.FC<{
   wallet: BrowserKeyBridge;

@@ -16,6 +16,13 @@ export const DEFAULT_LCD_URL =
 export const DEFAULT_RELAY_URL =
   import.meta.env["VITE_RELAY_URL"] ?? "ws://127.0.0.1:19910/relay";
 
+// Where poker-faucetd answers, if this deployment has one. Empty is a normal
+// configuration — the wallet then tells the player to get chips elsewhere
+// instead of offering a button that cannot work. The faucet is invitation-only
+// on the public testnet, so the claim form asks for the code the player was
+// sent; see docs/faucet/README.md.
+export const FAUCET_URL = import.meta.env["VITE_FAUCET_URL"] ?? "";
+
 // Said on the risk gate and again in the banner, in the same words both times.
 export const DESKTOP_CLIENT_NOTE =
   "For real funds use the desktop or mobile client, where the key lives outside the browser.";
