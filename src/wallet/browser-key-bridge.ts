@@ -34,6 +34,7 @@ import {
 import { KeyHolder, toHex } from "./key-holder";
 import {
   encodeAuthInfo,
+  encodeMsgAdjudicateSession,
   encodeMsgCancelGameIntent,
   encodeMsgClaimSessionTimeout,
   encodeMsgOpenGameIntent,
@@ -44,6 +45,7 @@ import {
   encodeSignDoc,
   encodeTxBody,
   encodeTxRaw,
+  MSG_ADJUDICATE_SESSION_TYPE_URL,
   MSG_CANCEL_GAME_INTENT_TYPE_URL,
   MSG_CLAIM_SESSION_TIMEOUT_TYPE_URL,
   MSG_OPEN_GAME_INTENT_TYPE_URL,
@@ -81,6 +83,14 @@ const ALLOWED_PAYLOAD_PREFIXES = [
 // the estimate with no floor.
 const GAS_FLOOR_GAME = "400000";
 const GAS_FLOOR_EVIDENCE = "3000000";
+
+// Adjudication replays the disputed hand through the C++ engine inside the
+// transaction and then pays out the verdict, so it is the most expensive
+// message this client sends and the one whose cost depends most on state it
+// does not control (how long the evidence transcript is). It is also the last
+// resort for an escrow nobody else can release, so it gets the same headroom
+// as evidence rather than a tight estimate.
+const GAS_FLOOR_ADJUDICATE = "3000000";
 
 // A transfer's cost does not depend on state anyone else can move, so this is
 // only the fallback for a node that will not simulate — not a floor.
@@ -233,6 +243,19 @@ export class BrowserKeyBridge implements PokerWalletBridge {
       MSG_CLAIM_SESSION_TIMEOUT_TYPE_URL,
       encodeMsgClaimSessionTimeout({ creator: bech32Address, sessionId }),
       GAS_FLOOR_GAME
+    );
+  }
+
+  async adjudicateSession(
+    chainId: string,
+    sessionId: string
+  ): Promise<PokerTxResult> {
+    const { bech32Address } = await this.getKey(chainId);
+    return this.broadcast(
+      chainId,
+      MSG_ADJUDICATE_SESSION_TYPE_URL,
+      encodeMsgAdjudicateSession({ creator: bech32Address, sessionId }),
+      GAS_FLOOR_ADJUDICATE
     );
   }
 

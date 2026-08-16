@@ -117,6 +117,8 @@ export const MSG_SUBMIT_SESSION_EVIDENCE_TYPE_URL =
   "/pokerchain.pokerchain.v1.MsgSubmitSessionEvidence";
 export const MSG_SUBMIT_SESSION_SECRET_TYPE_URL =
   "/pokerchain.pokerchain.v1.MsgSubmitSessionSecret";
+export const MSG_ADJUDICATE_SESSION_TYPE_URL =
+  "/pokerchain.pokerchain.v1.MsgAdjudicateSession";
 
 // cosmos.base.v1beta1.Coin — amount is the integer base-denom string, never a
 // number: balances outrun float precision.
@@ -174,6 +176,18 @@ export function encodeMsgCancelGameIntent(msg: {
 }
 
 export function encodeMsgClaimSessionTimeout(msg: {
+  creator: string;
+  sessionId: string;
+}): Uint8Array {
+  return new ProtoWriter()
+    .string(1, msg.creator)
+    .uint64(2, msg.sessionId)
+    .finish();
+}
+
+// Same shape as the claim above, different verb: this one asks the chain to
+// run the adjudication engine over the evidence and secrets already on it.
+export function encodeMsgAdjudicateSession(msg: {
   creator: string;
   sessionId: string;
 }): Uint8Array {

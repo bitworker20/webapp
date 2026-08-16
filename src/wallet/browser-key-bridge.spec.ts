@@ -217,6 +217,22 @@ describe("transaction signing", () => {
     expect(secp256k1.verify(signature, sha256(signDoc), pubKey)).toBe(true);
   });
 
+  it("sends an adjudication as MsgAdjudicateSession for that session", async () => {
+    // The only message that releases a disputed escrow. Getting the type URL
+    // or the session id wrong here is money that never comes back.
+    const lcd = stubLcd();
+    const { bridge } = makeBridge();
+
+    const result = await bridge.adjudicateSession(CHAIN_ID, "42");
+    expect(result.code).toBe(0);
+
+    const body = new TextDecoder("latin1").decode(lcd.posted());
+    expect(body).toContain("/pokerchain.pokerchain.v1.MsgAdjudicateSession");
+    expect(body).toContain(FIXTURE_ADDRESS);
+    // MsgAdjudicateSession.session_id: field 2, varint, 42.
+    expect(body).toContain("\x10\x2a");
+  });
+
   it("reports the DeliverTx outcome, not just CheckTx", async () => {
     // BROADCAST_MODE_SYNC answers before execution. A message that passes
     // CheckTx and then fails in the block (out of gas, insufficient escrow)
