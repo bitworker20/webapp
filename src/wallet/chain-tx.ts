@@ -107,6 +107,8 @@ export const MSG_SEND_TYPE_URL = "/cosmos.bank.v1beta1.MsgSend";
 
 export const MSG_OPEN_GAME_INTENT_TYPE_URL =
   "/pokerchain.pokerchain.v1.MsgOpenGameIntent";
+export const MSG_CANCEL_GAME_INTENT_TYPE_URL =
+  "/pokerchain.pokerchain.v1.MsgCancelGameIntent";
 export const MSG_SUBMIT_SESSION_RESULT_TYPE_URL =
   "/pokerchain.pokerchain.v1.MsgSubmitSessionResult";
 export const MSG_SUBMIT_SESSION_EVIDENCE_TYPE_URL =
@@ -156,6 +158,16 @@ export function encodeMsgOpenGameIntent(msg: {
     .string(5, msg.opponent)
     .string(6, msg.playerSessionPubkey)
     .string(7, msg.playerTransportPubkey ?? "")
+    .finish();
+}
+
+export function encodeMsgCancelGameIntent(msg: {
+  creator: string;
+  intentId: string;
+}): Uint8Array {
+  return new ProtoWriter()
+    .string(1, msg.creator)
+    .uint64(2, msg.intentId)
     .finish();
 }
 

@@ -132,11 +132,23 @@ const Progress: React.FC<{ session: PokerSession }> = ({ session }) => {
       )}
 
       {snapshot.stage === "matching" && (
-        <p className="faint tiny" style={{ margin: 0 }}>
-          Your stake is escrowed on chain and the intent is live. It matches as
-          soon as someone opens an overlapping one — leaving this page cancels
-          nothing, but nobody can play your seat for you.
-        </p>
+        <>
+          <p className="faint tiny" style={{ margin: 0 }}>
+            The offer is live on chain and matches as soon as someone opens an
+            overlapping one. Withdraw it if you are done waiting — an offer
+            left standing can be matched later, and matching escrows your
+            stake whether or not you are still here.
+          </p>
+          <div className="row">
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={session.cancelMatchmaking}
+              data-testid="cancel-matchmaking"
+            >
+              Withdraw the offer
+            </button>
+          </div>
+        </>
       )}
     </section>
   );

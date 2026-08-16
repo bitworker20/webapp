@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { PokerGame } from "@bitpoker/poker-session/controller";
 import {
   ChainGameIntent,
+  fetchChainHeight,
   fetchOpenIntents,
   joinableIntents,
   localGameName,
@@ -102,9 +103,14 @@ const Lobby: React.FC<{
 
   const refresh = useCallback(async () => {
     try {
-      setIntents(
-        joinableIntents(await fetchOpenIntents(DEFAULT_LCD_URL), myAddress)
-      );
+      // The height is what tells an expired offer from a live one: expired
+      // intents stay PENDING on chain, and joining one costs a fee for a game
+      // that can never start.
+      const [all, height] = await Promise.all([
+        fetchOpenIntents(DEFAULT_LCD_URL),
+        fetchChainHeight(DEFAULT_LCD_URL),
+      ]);
+      setIntents(joinableIntents(all, myAddress, height));
       setError("");
     } catch (e: any) {
       setError(e?.message ?? String(e));

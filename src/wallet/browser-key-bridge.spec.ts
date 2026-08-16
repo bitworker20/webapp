@@ -26,8 +26,9 @@ function makeBridge(
   };
 }
 
-// Minimal LCD double: account lookup then broadcast. Returns the posted
-// tx_bytes so a test can pull the SignDoc apart.
+// Minimal LCD double: account lookup, broadcast, then the by-hash query the
+// bridge waits on for inclusion. Returns the posted tx_bytes so a test can
+// pull the SignDoc apart.
 function stubLcd(): { posted: () => Uint8Array } {
   let postedBytes = new Uint8Array(0);
   vi.stubGlobal(
@@ -38,6 +39,15 @@ function stubLcd(): { posted: () => Uint8Array } {
           ok: true,
           json: async () => ({
             account: { account_number: "12", sequence: "7" },
+          }),
+        } as any;
+      }
+      // Inclusion poll: the bridge asks for the tx by hash until it lands.
+      if (url.includes("/cosmos/tx/v1beta1/txs/")) {
+        return {
+          ok: true,
+          json: async () => ({
+            tx_response: { txhash: "ABC123", code: 0, raw_log: "" },
           }),
         } as any;
       }
@@ -205,6 +215,41 @@ describe("transaction signing", () => {
     ]);
     const pubKey = secp256k1.getPublicKey(FIXTURE_PRIV_KEY, true);
     expect(secp256k1.verify(signature, sha256(signDoc), pubKey)).toBe(true);
+  });
+
+  it("reports the DeliverTx outcome, not just CheckTx", async () => {
+    // BROADCAST_MODE_SYNC answers before execution. A message that passes
+    // CheckTx and then fails in the block (out of gas, insufficient escrow)
+    // used to look like success.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/accounts/")) {
+          return {
+            ok: true,
+            json: async () => ({ account: { account_number: "1", sequence: "0" } }),
+          } as any;
+        }
+        if (url.includes("/cosmos/tx/v1beta1/txs/")) {
+          return {
+            ok: true,
+            json: async () => ({
+              tx_response: { txhash: "BEEF", code: 11, raw_log: "out of gas" },
+            }),
+          } as any;
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            tx_response: { txhash: "BEEF", code: 0, raw_log: "" },
+          }),
+        } as any;
+      })
+    );
+    const { bridge } = makeBridge();
+    const result = await bridge.cancelIntent(CHAIN_ID, "7");
+    expect(result.code).toBe(11);
+    expect(result.rawLog).toContain("out of gas");
   });
 
   it("surfaces a non-zero tx code instead of pretending it worked", async () => {

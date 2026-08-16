@@ -34,6 +34,7 @@ import {
 import { KeyHolder, toHex } from "./key-holder";
 import {
   encodeAuthInfo,
+  encodeMsgCancelGameIntent,
   encodeMsgOpenGameIntent,
   encodeMsgSend,
   encodeMsgSubmitSessionEvidence,
@@ -42,6 +43,7 @@ import {
   encodeSignDoc,
   encodeTxBody,
   encodeTxRaw,
+  MSG_CANCEL_GAME_INTENT_TYPE_URL,
   MSG_OPEN_GAME_INTENT_TYPE_URL,
   MSG_SEND_TYPE_URL,
   MSG_SUBMIT_SESSION_EVIDENCE_TYPE_URL,
@@ -85,6 +87,10 @@ const GAS_FALLBACK_SEND = "200000";
 // A simulated tx is never verified, but the signature slot must exist and be
 // the right length or the ante handler rejects the shape before measuring.
 const DUMMY_SIGNATURE = new Uint8Array(64);
+
+// How long to wait for a broadcast transaction to land in a block.
+const TX_INCLUSION_ATTEMPTS = 30;
+const TX_INCLUSION_POLL_MS = 1000;
 
 // The denom this wallet holds, and so the one it wants to pay fees in when a
 // node advertises several prices.
@@ -192,6 +198,22 @@ export class BrowserKeyBridge implements PokerWalletBridge {
         playerSessionPubkey: args.playerSessionPubkey,
         playerTransportPubkey: args.playerTransportPubkey,
       }),
+      GAS_FLOOR_GAME
+    );
+  }
+
+  // No approval prompt, deliberately: this is the transaction that takes an
+  // offer OFF the table. Nothing about it can cost the player money, and the
+  // client sends it exactly when the player has stopped paying attention.
+  async cancelIntent(
+    chainId: string,
+    intentId: string
+  ): Promise<PokerTxResult> {
+    const { bech32Address } = await this.getKey(chainId);
+    return this.broadcast(
+      chainId,
+      MSG_CANCEL_GAME_INTENT_TYPE_URL,
+      encodeMsgCancelGameIntent({ creator: bech32Address, intentId }),
       GAS_FLOOR_GAME
     );
   }
@@ -439,11 +461,51 @@ export class BrowserKeyBridge implements PokerWalletBridge {
     if (!response) {
       throw new Error("broadcast response had no tx_response");
     }
-    return {
-      txHash: String(response.txhash ?? ""),
-      code: Number(response.code ?? 0),
-      rawLog: String(response.raw_log ?? ""),
-    };
+    const txHash = String(response.txhash ?? "");
+    const checkCode = Number(response.code ?? 0);
+    if (checkCode !== 0 || !txHash) {
+      // Rejected before it reached the mempool; there is nothing to wait for.
+      return {
+        txHash,
+        code: checkCode,
+        rawLog: String(response.raw_log ?? ""),
+      };
+    }
+    return this.awaitInclusion(txHash);
+  }
+
+  // Waits for the transaction to be in a block, and reports what DeliverTx
+  // made of it. Two reasons this is not optional:
+  //
+  //   - BROADCAST_MODE_SYNC returns after CheckTx, so a message that fails in
+  //     execution (out of gas, insufficient escrow) looked like success.
+  //   - The account sequence only advances on inclusion. Sending a second
+  //     transaction before the first lands signs it with the same sequence,
+  //     and the chain silently drops one of them — which is how withdrawing a
+  //     stale offer and opening a new one in the same breath lost the new one.
+  //
+  // The extension's background service has always done this; the page did not.
+  protected async awaitInclusion(txHash: string): Promise<PokerTxResult> {
+    for (let attempt = 0; attempt < TX_INCLUSION_ATTEMPTS; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, TX_INCLUSION_POLL_MS));
+      try {
+        const res = await fetch(`${this.lcdUrl}/cosmos/tx/v1beta1/txs/${txHash}`);
+        if (!res.ok) {
+          continue; // not indexed yet
+        }
+        const response = (await res.json())?.tx_response;
+        if (response) {
+          return {
+            txHash,
+            code: Number(response.code ?? 0),
+            rawLog: String(response.raw_log ?? ""),
+          };
+        }
+      } catch {
+        // The node may be briefly unreachable; keep waiting.
+      }
+    }
+    throw new Error(`tx ${txHash} was not included within 30s`);
   }
 }
 

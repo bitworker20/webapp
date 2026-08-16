@@ -26,6 +26,9 @@ export interface PokerSession {
   active: boolean;
   join(options: ChainJoinOptions): void;
   act(kind: number, amount?: number): void;
+  // Give up waiting for an opponent: withdraws the on-chain offer so it cannot
+  // be matched later, when nobody is here to play it.
+  cancelMatchmaking(): void;
   setContinueWish(wish: boolean): void;
   // Back to an empty lobby. Drops the finished controller rather than reusing
   // it: a fresh one gets a fresh worker, so nothing from the last hand — wasm
@@ -65,6 +68,10 @@ export function usePokerSession(wallet: PokerWalletBridge): PokerSession {
     [controller]
   );
 
+  const cancelMatchmaking = useCallback(() => {
+    void controller.cancelMatchmaking();
+  }, [controller]);
+
   const setContinueWish = useCallback(
     (wish: boolean) => {
       void controller.setContinueWish(wish);
@@ -85,6 +92,7 @@ export function usePokerSession(wallet: PokerWalletBridge): PokerSession {
     active: snapshot.stage !== "idle",
     join,
     act,
+    cancelMatchmaking,
     setContinueWish,
     clear,
     runSelfTest,

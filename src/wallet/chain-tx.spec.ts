@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import vectors from "@bitpoker/poker-session/fixtures/chain-tx-vectors.json";
 import {
   encodeAuthInfo,
+  encodeMsgCancelGameIntent,
   encodeMsgOpenGameIntent,
   encodeMsgSubmitSessionEvidence,
   encodeMsgSubmitSessionResult,
@@ -32,6 +33,11 @@ describe("pokerchain message encoding matches the extension's encoder", () => {
   it("omits empty opponent and transport pubkey (proto3 defaults)", () => {
     const v = vectors.openGameIntentOpenMatch;
     expect(hex(encodeMsgOpenGameIntent(v.input))).toBe(v.hex);
+  });
+
+  it("encodes MsgCancelGameIntent", () => {
+    const v = vectors.cancelGameIntent;
+    expect(hex(encodeMsgCancelGameIntent(v.input))).toBe(v.hex);
   });
 
   it("encodes MsgSubmitSessionResult", () => {
